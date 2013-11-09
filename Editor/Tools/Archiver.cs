@@ -18,7 +18,7 @@ public class Archiver : EditorWindow {
 	/// コンストラクタ
 	/// </summary>
 	Archiver() {
-		c_on_gui_func_table_ = new System.Action[]{ExtractGUI, InsertGUI};
+		c_on_gui_func_table_ = new System.Action[]{OnGUIforExtract, OnGUIforInsert};
 	}
 	
 	/// <summary>
@@ -32,8 +32,8 @@ public class Archiver : EditorWindow {
 	/// <summary>
 	/// 抽出の為のGUI描画
 	/// </summary>
-	private void ExtractGUI() {
-		archive_asset_ = EditorGUILayout.ObjectField("ArchiveAsset", archive_asset_, typeof(Object), true);
+	private void OnGUIforExtract() {
+		archive_asset_ = EditorGUILayout.ObjectField("ArchiveAsset", archive_asset_, typeof(Object), false);
 		extract_asset_name_ = EditorGUILayout.TextField("ExtractName", extract_asset_name_);
 		
 		GUI.enabled = (null != archive_asset_) && (null != extract_asset_name_);
@@ -53,8 +53,8 @@ public class Archiver : EditorWindow {
 	/// <summary>
 	/// 挿入の為のGUI描画
 	/// </summary>
-	private void InsertGUI() {
-		archive_asset_ = EditorGUILayout.ObjectField("ArchiveAsset", archive_asset_, typeof(Object), true);
+	private void OnGUIforInsert() {
+		archive_asset_ = EditorGUILayout.ObjectField("ArchiveAsset", archive_asset_, typeof(Object), false);
 		insert_asset_ = EditorGUILayout.ObjectField("InsertAsset", insert_asset_, typeof(Object), true);
 		
 		GUI.enabled = (null != archive_asset_) && (null != insert_asset_);
