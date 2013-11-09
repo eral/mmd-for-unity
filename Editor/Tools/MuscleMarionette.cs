@@ -11,7 +11,7 @@ public class MuscleMarionette : EditorWindow {
 	/// </summary>
 	[MenuItem("MMD for Unity/Tools/MuscleMarionette")]
 	static void OnMenuClick() {
-		MuscleMarionette window = EditorWindow.GetWindow<MuscleMarionette>(true, "MuscleMarionette");
+		MuscleMarionette window = EditorWindow.GetWindow<MuscleMarionette>("MuscleMarionette");
 		window.Show();
 	}
 	
@@ -55,8 +55,37 @@ public class MuscleMarionette : EditorWindow {
 
 		if (is_dirty) {
 			//更新が有ったなら
-			//ポーズ更新
-			ApplyMusclesValue();
+			MMDEngine mmd_engine = animator_.GetComponent<MMDEngine>();
+			if (null != mmd_engine) {
+				//ボーン外のTransformが初期化されるので保存
+				var human_bones_transform = Enumerable.Range(0, ((int)HumanBodyBones.LastBone) - 1)					//Mecanimボーン数カウント
+														.Select(x=>animator_.GetBoneTransform((HumanBodyBones)x));	//MecanimボーンのTransformを列挙
+				var backup_transform = mmd_engine.bone_controllers.Select(x=>x.transform)													//モデルのTransformを列挙
+																.Except(human_bones_transform)												//MecanimボーンのTransformを除外
+																.Select(x=>new {position = x.localPosition, rotation = x.localRotation})	//位置・書いての保存
+																.ToArray();
+
+				//ポーズ更新
+				ApplyMusclesValue();
+
+				//ボーン外のTransformが復元
+				var new_gameobject = mmd_engine.bone_controllers.Select(x=>x.transform)													//モデルのTransformを列挙
+																.Except(human_bones_transform)											//MecanimボーンのTransformを除外
+																.Select(x=>x.gameObject)												//GameObjectの取得
+																.ToArray();
+				foreach(var zip in Enumerable.Range(0, new_gameobject.Length)
+											.Select(x=>new {gameobject = new_gameobject[x], transform = backup_transform[x]})) {
+					zip.gameobject.transform.localPosition = zip.transform.position;
+					zip.gameobject.transform.localRotation = zip.transform.rotation;
+				}
+
+				//MMDEngine更新
+				mmd_engine.LateUpdate();
+			} else {
+				//ポーズ更新
+				ApplyMusclesValue();
+			}
+			
 			//Window更新
 			EditorUtility.SetDirty(this);
 		}
@@ -76,6 +105,14 @@ public class MuscleMarionette : EditorWindow {
 				//Animatorが有効なら
 				//周辺情報取得
 				avatar_ = animator_.avatar;
+
+				MMDEngine mmd_engine = animator_.GetComponent<MMDEngine>();
+				if (null != mmd_engine) {
+					foreach (var bone_controller in mmd_engine.bone_controllers) {
+						bone_controller.Start();
+					}
+					mmd_engine.LateUpdate();
+				}
 			} else {
 				//Animatorが無効なら
 				//周辺情報リセット

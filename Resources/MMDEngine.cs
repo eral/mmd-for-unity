@@ -84,7 +84,7 @@ public class MMDEngine : MonoBehaviour {
 		}
 	}
 
-	void LateUpdate() 
+	public void LateUpdate() 
 	{
 		//IK反映
 		foreach (CCDIKSolver ik_script in this.ik_list) {
