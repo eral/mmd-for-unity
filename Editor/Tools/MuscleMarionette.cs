@@ -93,6 +93,8 @@ public class MuscleMarionette : EditorWindow {
 				//Animatorが有効なら
 				//MMDEngineの有効化
 				StartMmdEngine();
+				//ポーズ取得
+				//empty
 			}
 			//値リセット
 			ResetValue();
