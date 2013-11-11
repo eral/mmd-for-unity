@@ -59,26 +59,13 @@ public class MuscleMarionette : EditorWindow {
 			MMDEngine mmd_engine = animator_.GetComponent<MMDEngine>();
 			if (null != mmd_engine) {
 				//ボーン外のTransformが初期化されるので保存
-				var human_bones_transform = Enumerable.Range(0, ((int)HumanBodyBones.LastBone) - 1)					//Mecanimボーン数カウント
-														.Select(x=>animator_.GetBoneTransform((HumanBodyBones)x));	//MecanimボーンのTransformを列挙
-				var backup_transform = mmd_engine.bone_controllers.Select(x=>x.transform)													//モデルのTransformを列挙
-																.Except(human_bones_transform)												//MecanimボーンのTransformを除外
-																.Select(x=>new {position = x.localPosition, rotation = x.localRotation})	//位置・書いての保存
-																.ToArray();
+				MmdBackupTransform[] mmd_backup_transforms = BackupMmdTransform();
 
 				//ポーズ更新
 				ApplyMusclesValue();
 
 				//ボーン外のTransformが復元
-				var new_gameobject = mmd_engine.bone_controllers.Select(x=>x.transform)													//モデルのTransformを列挙
-																.Except(human_bones_transform)											//MecanimボーンのTransformを除外
-																.Select(x=>x.gameObject)												//GameObjectの取得
-																.ToArray();
-				foreach(var zip in Enumerable.Range(0, new_gameobject.Length)
-											.Select(x=>new {gameobject = new_gameobject[x], transform = backup_transform[x]})) {
-					zip.gameobject.transform.localPosition = zip.transform.position;
-					zip.gameobject.transform.localRotation = zip.transform.rotation;
-				}
+				RollbackMmdTransform(mmd_backup_transforms);
 
 				//MMDEngine更新
 				mmd_engine.LateUpdate();
@@ -105,13 +92,7 @@ public class MuscleMarionette : EditorWindow {
 			if (null != animator_) {
 				//Animatorが有効なら
 				//MMDEngineの有効化
-				MMDEngine mmd_engine = animator_.GetComponent<MMDEngine>();
-				if (null != mmd_engine) {
-					foreach (var bone_controller in mmd_engine.bone_controllers) {
-						bone_controller.Start();
-					}
-					mmd_engine.LateUpdate();
-				}
+				StartMmdEngine();
 			}
 			//値リセット
 			ResetValue();
@@ -265,6 +246,74 @@ public class MuscleMarionette : EditorWindow {
 		}
 	}
 	
+	/// <summary>
+	/// MMDモデル保存用トランスフォーム
+	/// </summary>
+	private struct MmdBackupTransform {
+		public Vector3		position;
+		public Quaternion	rotation;
+		public MmdBackupTransform(Vector3 p, Quaternion r) {
+			position = p;
+			rotation = r;
+		}
+	};
+
+	/// <summary>
+	/// MMDモデルのトランスフォームを保存
+	/// </summary>
+	/// <value>MMDモデルの保存用トランスフォーム</value>
+	private MmdBackupTransform[] BackupMmdTransform() {
+		MmdBackupTransform[] result = null;
+		MMDEngine mmd_engine = animator_.GetComponent<MMDEngine>();
+		if (null != mmd_engine) {
+			//ボーン外のTransformが初期化されるので保存
+			var human_bones_transform = Enumerable.Range(0, ((int)HumanBodyBones.LastBone) - 1)					//Mecanimボーン数カウント
+													.Select(x=>animator_.GetBoneTransform((HumanBodyBones)x));	//MecanimボーンのTransformを列挙
+			result = mmd_engine.bone_controllers.Select(x=>x.transform)													//モデルのTransformを列挙
+												.Except(human_bones_transform)											//MecanimボーンのTransformを除外
+												.Select(x=>new MmdBackupTransform(x.localPosition, x.localRotation))	//トランスフォームの保存
+												.ToArray();
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// MMDモデルのトランスフォームを復元
+	/// </summary>
+	/// <param name='transforms'>MMDモデルの保存用トランスフォーム</param>
+	private void RollbackMmdTransform(MmdBackupTransform[] transforms) {
+		MMDEngine mmd_engine = animator_.GetComponent<MMDEngine>();
+		if (null != mmd_engine) {
+			//ボーン外のTransformが復元
+			var human_bones_transform = Enumerable.Range(0, ((int)HumanBodyBones.LastBone) - 1)					//Mecanimボーン数カウント
+													.Select(x=>animator_.GetBoneTransform((HumanBodyBones)x));	//MecanimボーンのTransformを列挙
+			var new_gameobject = mmd_engine.bone_controllers.Select(x=>x.transform)													//モデルのTransformを列挙
+															.Except(human_bones_transform)											//MecanimボーンのTransformを除外
+															.Select(x=>x.gameObject)												//GameObjectの取得
+															.ToArray();
+			foreach(var zip in Enumerable.Range(0, new_gameobject.Length)
+										.Select(x=>new {gameobject = new_gameobject[x], transform = transforms[x]})) {
+				zip.gameobject.transform.localPosition = zip.transform.position;
+				zip.gameobject.transform.localRotation = zip.transform.rotation;
+			}
+		}
+	}
+	
+	/// <summary>
+	/// MMDEngineの有効化
+	/// </summary>
+	private void StartMmdEngine() {
+		MMDEngine mmd_engine = animator_.GetComponent<MMDEngine>();
+		if (null != mmd_engine) {
+			//全てのボーンコントローラーのStart()を呼ぶ
+			foreach (var bone_controller in mmd_engine.bone_controllers) {
+				bone_controller.Start();
+			}
+			//付与親等を更新
+			mmd_engine.LateUpdate();
+		}
+	}
+
 	/// <summary>
 	/// グループ分け
 	/// </summary>
