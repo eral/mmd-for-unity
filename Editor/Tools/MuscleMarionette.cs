@@ -147,7 +147,14 @@ public class MuscleMarionette : EditorWindow {
 			//Undo登録
 			Undo.RegisterUndo(this, "Change Group Value");
 			//更新
-			group_value_[(int)group_index] = value;
+			switch (group_index) {
+			case Group.All: //ALLなら全グループ更新
+				group_value_ = Enumerable.Repeat(value, group_value_.Length).ToArray();
+				break;
+			default: //ALL以外なら個々の更新
+				group_value_[(int)group_index] = value;
+				break;
+			}
 			//Muscles走査
 			foreach (var muscle in muscles) {
 				muscles_value_[(int)muscle] = value;
