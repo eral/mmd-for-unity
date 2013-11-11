@@ -45,15 +45,16 @@ public class MuscleMarionette : EditorWindow {
 		bool is_dirty = false;
 		
 		is_dirty = OnGUIforAnimator() || is_dirty;
-		if ((null != animator_) && (null == avatar_)) {
+		Avatar avatar = ((null != animator_)? animator_.avatar: null);
+		if ((null != animator_) && (null == avatar)) {
 			//Animatorは設定されたがAvatarが取得出来無いなら
 			is_dirty = OnGUIforNoSetAvatarErrorMessage() || is_dirty;
 		}
-		GUI.enabled = null != avatar_;
+		GUI.enabled = (null != avatar);
 		is_dirty = OnGUIforGroup() || is_dirty;
 		is_dirty = OnGUIforMuscles() || is_dirty;
 
-		if (is_dirty) {
+		if (is_dirty && (null != animator_)) {
 			//更新が有ったなら
 			MMDEngine mmd_engine = animator_.GetComponent<MMDEngine>();
 			if (null != mmd_engine) {
@@ -103,9 +104,7 @@ public class MuscleMarionette : EditorWindow {
 			animator_ = new_animator_;
 			if (null != animator_) {
 				//Animatorが有効なら
-				//周辺情報取得
-				avatar_ = animator_.avatar;
-
+				//MMDEngineの有効化
 				MMDEngine mmd_engine = animator_.GetComponent<MMDEngine>();
 				if (null != mmd_engine) {
 					foreach (var bone_controller in mmd_engine.bone_controllers) {
@@ -113,10 +112,6 @@ public class MuscleMarionette : EditorWindow {
 					}
 					mmd_engine.LateUpdate();
 				}
-			} else {
-				//Animatorが無効なら
-				//周辺情報リセット
-				avatar_ = null;
 			}
 			//値リセット
 			ResetValue();
@@ -259,12 +254,7 @@ public class MuscleMarionette : EditorWindow {
 	/// Muscles値の反映
 	/// </summary>
 	private void ApplyMusclesValue() {
-		if (null != avatar_) {
-#if false
-			for (int i = 0, i_max = muscles_value_.Length; i < i_max; ++i) {
-				AvatarSetParameter(avatar_, i, muscles_value_[i]);
-			}
-#else
+		if ((null != animator_) && (null != animator_.avatar)) {
 			Types.GetType("UnityEditor.AvatarUtility", "UnityEditor.dll")
 				.InvokeMember("SetHumanPose"
 							, BindingFlags.Public | BindingFlags.Static | BindingFlags.InvokeMethod
@@ -272,23 +262,8 @@ public class MuscleMarionette : EditorWindow {
 							, null
 							, new object[]{animator_, muscles_value_}
 							);
-#endif
 		}
 	}
-	
-#if false
-	/// <summary>
-	/// Muscles値の反映
-	/// </summary>
-	private static void AvatarSetParameter(Avatar avatar, int muscle_index, float muscle_value) {
-		avatar.GetType().InvokeMember("SetParameter"
-									, BindingFlags.NonPublic | BindingFlags.Instance | BindingFlags.InvokeMethod
-									, null
-									, avatar
-									, new object[]{muscle_index, muscle_value}
-									);
-	}
-#endif
 	
 	/// <summary>
 	/// グループ分け
@@ -432,7 +407,6 @@ public class MuscleMarionette : EditorWindow {
 	}
 
 	private Animator animator_ = null;
-	private Avatar avatar_ = null;
 	private float[] group_value_ = null;
 	private float[] muscles_value_ = null;
 
