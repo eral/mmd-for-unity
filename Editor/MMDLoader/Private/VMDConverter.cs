@@ -2,6 +2,7 @@
 using UnityEditor;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 using MMD.VMD;
 
 namespace MMD
@@ -13,10 +14,9 @@ namespace MMD
 		/// </summary>
 		/// <param name='name'>内部形式データ</param>
 		/// <param name='assign_pmd'>使用するPMDのGameObject</param>
-		/// <param name='interpolationQuality'>補完曲線品質</param>
-		public static AnimationClip CreateAnimationClip(VMDFormat format, GameObject assign_pmd, int interpolationQuality) {
+		public static AnimationClip CreateAnimationClip(VMDFormat format, GameObject assign_pmd) {
 			VMDConverter converter = new VMDConverter();
-			return converter.CreateAnimationClip_(format, assign_pmd, interpolationQuality);
+			return converter.CreateAnimationClip_(format, assign_pmd);
 		}
 
 		/// <summary>
@@ -28,7 +28,7 @@ namespace MMD
 		private VMDConverter() {}
 
 		// クリップをアニメーションに登録する
-		private AnimationClip CreateAnimationClip_(MMD.VMD.VMDFormat format, GameObject assign_pmd, int interpolationQuality)
+		private AnimationClip CreateAnimationClip_(MMD.VMD.VMDFormat format, GameObject assign_pmd)
 		{
 			//スケール設定
 			scale_ = 1.0f;
@@ -49,7 +49,7 @@ namespace MMD
 			Dictionary<string, GameObject> gameobj = new Dictionary<string, GameObject>();
 			GetGameObjects(gameobj, assign_pmd);		// 親ボーン下のGameObjectを取得
 			FullSearchBonePath(assign_pmd.transform, bone_path);
-			FullEntryBoneAnimation(format, clip, bone_path, gameobj, interpolationQuality);
+			FullEntryBoneAnimation(format, clip, bone_path, gameobj);
 
 			CreateKeysForSkin(format, clip);	// 表情の追加
 			
@@ -96,21 +96,9 @@ namespace MMD
 			return (ax == ay) && (bx == by);
 		}
 		// 補間曲線の近似のために追加するキーフレームを含めたキーフレーム数を取得する
-		int GetKeyframeCount(List<MMD.VMD.VMDFormat.Motion> mlist, int type, int interpolationQuality)
+		int GetKeyframeCount(List<MMD.VMD.VMDFormat.Motion> mlist, int type)
 		{
-			int count = 0;
-			for(int i = 0; i < mlist.Count; i++)
-			{
-				if(i>0 && !IsLinear(mlist[i].interpolation, type))
-				{
-					count += interpolationQuality;//Interpolation Keyframes
-				}
-				else
-				{
-					count += 1;//Keyframe
-				}
-			}
-			return count;
+			return mlist.Count;
 		}
 		//キーフレームが1つの時、ダミーキーフレームを追加する
 		void AddDummyKeyframe(ref Keyframe[] keyframes)
@@ -129,18 +117,22 @@ namespace MMD
 		// 任意の型のvalueを持つキーフレーム
 		abstract class CustomKeyframe<Type>
 		{
-			public CustomKeyframe(float time,Type value)
+			public CustomKeyframe(float time,Type value, Vector2 in_vector, Vector2 out_vector)
 			{
 				this.time=time;
 				this.value=value;
+				this.in_vector=in_vector;
+				this.out_vector=out_vector;
 			}
 			public float time{ get; set; }
 			public Type value{ get; set; }
+			public Vector2 in_vector{ get; set; }
+			public Vector2 out_vector{ get; set; }
 		}
 		// float型のvalueを持つキーフレーム
 		class FloatKeyframe:CustomKeyframe<float>
 		{
-			public FloatKeyframe(float time,float value):base(time,value)
+			public FloatKeyframe(float time,float value, Vector2 in_vector, Vector2 out_vector):base(time,value,in_vector,out_vector)
 			{
 			}
 			// 線形補間
@@ -148,36 +140,23 @@ namespace MMD
 			{
 				return new FloatKeyframe(
 					Mathf.Lerp(from.time,to.time,t.x),
-					Mathf.Lerp(from.value,to.value,t.y)
+					Mathf.Lerp(from.value,to.value,t.y),
+					Vector2.zero,
+					Vector2.zero
 				);
 			}
 			// ベジェを線形補間で近似したキーフレームを追加する
 			public static void AddBezierKeyframes(byte[] interpolation, int type,
-				FloatKeyframe prev_keyframe,FloatKeyframe cur_keyframe, int interpolationQuality,
+				FloatKeyframe prev_keyframe,FloatKeyframe cur_keyframe,
 				ref FloatKeyframe[] keyframes,ref int index)
 			{
-				if(prev_keyframe==null || IsLinear(interpolation,type))
-				{
-					keyframes[index++]=cur_keyframe;
-				}
-				else
-				{
-					Vector2 bezierHandleA=GetBezierHandle(interpolation,type,0);
-					Vector2 bezierHandleB=GetBezierHandle(interpolation,type,1);
-					int sampleCount = interpolationQuality;
-					for(int j = 0; j < sampleCount; j++)
-					{
-						float t = (j+1)/(float)sampleCount;
-						Vector2 sample = SampleBezier(bezierHandleA,bezierHandleB,t);
-						keyframes[index++] = FloatKeyframe.Lerp(prev_keyframe,cur_keyframe,sample);
-					}
-				}
+				keyframes[index++]=cur_keyframe;
 			}
 		}
 		// Quaternion型のvalueを持つキーフレーム
 		class QuaternionKeyframe:CustomKeyframe<Quaternion>
 		{
-			public QuaternionKeyframe(float time,Quaternion value):base(time,value)
+			public QuaternionKeyframe(float time,Quaternion value, Vector2 in_vector, Vector2 out_vector):base(time,value,in_vector,out_vector)
 			{
 			}
 			// 線形補間
@@ -185,30 +164,17 @@ namespace MMD
 			{
 				return new QuaternionKeyframe(
 					Mathf.Lerp(from.time,to.time,t.x),
-					Quaternion.Slerp(from.value,to.value,t.y)
+					Quaternion.Slerp(from.value,to.value,t.y),
+					Vector2.zero,
+					Vector2.zero
 				);
 			}
 			// ベジェを線形補間で近似したキーフレームを追加する
 			public static void AddBezierKeyframes(byte[] interpolation, int type,
-				QuaternionKeyframe prev_keyframe,QuaternionKeyframe cur_keyframe, int interpolationQuality,
+				QuaternionKeyframe prev_keyframe,QuaternionKeyframe cur_keyframe,
 				ref QuaternionKeyframe[] keyframes,ref int index)
 			{
-				if(prev_keyframe==null || IsLinear(interpolation,type))
-				{
-					keyframes[index++]=cur_keyframe;
-				}
-				else
-				{
-					Vector2 bezierHandleA=GetBezierHandle(interpolation,type,0);
-					Vector2 bezierHandleB=GetBezierHandle(interpolation,type,1);
-					int sampleCount = interpolationQuality;
-					for(int j = 0; j < sampleCount; j++)
-					{
-						float t=(j+1)/(float)sampleCount;
-						Vector2 sample = SampleBezier(bezierHandleA,bezierHandleB,t);
-						keyframes[index++] = QuaternionKeyframe.Lerp(prev_keyframe,cur_keyframe,sample);
-					}
-				}
+				keyframes[index++]=cur_keyframe;
 			}
 			
 		}
@@ -246,59 +212,50 @@ namespace MMD
 		//UnityのKeyframeに変換する（回転用）
 		void ToKeyframesForRotation(QuaternionKeyframe[] custom_keys,ref Keyframe[] rx_keys,ref Keyframe[] ry_keys,ref Keyframe[] rz_keys)
 		{
-			rx_keys=new Keyframe[custom_keys.Length];
-			ry_keys=new Keyframe[custom_keys.Length];
-			rz_keys=new Keyframe[custom_keys.Length];
-			for(int i = 0; i < custom_keys.Length; i++)
-			{
-				//オイラー角を取り出す
-				Vector3 eulerAngles=custom_keys[i].value.eulerAngles;
-				rx_keys[i]=new Keyframe(custom_keys[i].time,eulerAngles.x);
-				ry_keys[i]=new Keyframe(custom_keys[i].time,eulerAngles.y);
-				rz_keys[i]=new Keyframe(custom_keys[i].time,eulerAngles.z);
-				//線形補間する
-				rx_keys[i].tangentMode=TangentModeBothLinear;
-				ry_keys[i].tangentMode=TangentModeBothLinear;
-				rz_keys[i].tangentMode=TangentModeBothLinear;
-				if(i>0)
-				{
-					float tx=GetLinearTangentForRotation(rx_keys[i-1],rx_keys[i]);
-					float ty=GetLinearTangentForRotation(ry_keys[i-1],ry_keys[i]);
-					float tz=GetLinearTangentForRotation(rz_keys[i-1],rz_keys[i]);
-					rx_keys[i-1].outTangent=tx;
-					ry_keys[i-1].outTangent=ty;
-					rz_keys[i-1].outTangent=tz;
-					rx_keys[i].inTangent=tx;
-					ry_keys[i].inTangent=ty;
-					rz_keys[i].inTangent=tz;
+			var axis_keys = new Keyframe[3][];
+			for (int axis = 0, axis_max = axis_keys.Length; axis < axis_max; ++axis) {
+				axis_keys[axis] = custom_keys.Select(x=>new Keyframe(x.time, x.value.eulerAngles[axis])).ToArray();
+				var keys = axis_keys[axis];
+				
+				for (int i = 0, i_max = keys.Length - 1; i < i_max; i++) {
+					float base_tangent = GetLinearTangentForRotation(keys[i], keys[i+1]);
+					
+					CurveUtility_SetKeyBroken(ref keys[i], true);
+					CurveUtility_SetKeyTangentMode(ref keys[i], true, CurveUtility_TangentMode.Editable);
+					keys[i].outTangent = custom_keys[i].in_vector.y / custom_keys[i].in_vector.x * base_tangent;
+					
+					CurveUtility_SetKeyBroken(ref keys[i+1], false);
+					CurveUtility_SetKeyTangentMode(ref keys[i+1], false, CurveUtility_TangentMode.Editable);
+					keys[i+1].inTangent = (1.0f - custom_keys[i].out_vector.y) / (1.0f - custom_keys[i].out_vector.x) * base_tangent;
 				}
+				
+				AddDummyKeyframe(ref keys);
 			}
-			AddDummyKeyframe(ref rx_keys);
-			AddDummyKeyframe(ref ry_keys);
-			AddDummyKeyframe(ref rz_keys);
+			rx_keys = axis_keys[0];
+			ry_keys = axis_keys[1];
+			rz_keys = axis_keys[2];
 		}
 		
 		
 		// あるボーンに含まれるキーフレを抽出
 		// これは回転のみ
-		void CreateKeysForRotation(MMD.VMD.VMDFormat format, AnimationClip clip, string current_bone, string bone_path, int interpolationQuality)
+		void CreateKeysForRotation(MMD.VMD.VMDFormat format, AnimationClip clip, string current_bone, string bone_path)
 		{
 			try 
 			{
 				List<MMD.VMD.VMDFormat.Motion> mlist = format.motion_list.motion[current_bone];
-				int keyframeCount = GetKeyframeCount(mlist, 3, interpolationQuality);
+				int keyframeCount = GetKeyframeCount(mlist, 3);
 				
 				QuaternionKeyframe[] r_keys = new QuaternionKeyframe[keyframeCount];
 				QuaternionKeyframe r_prev_key=null;
 				int ir=0;
 				for (int i = 0; i < mlist.Count; i++)
 				{
-					const float tick_time = 1.0f / 30.0f;
-					float tick = mlist[i].flame_no * tick_time;
+					float tick = mlist[i].flame_no * c_frame_to_time;
 					
 					Quaternion rotation=mlist[i].rotation;
-					QuaternionKeyframe r_cur_key=new QuaternionKeyframe(tick,rotation);
-					QuaternionKeyframe.AddBezierKeyframes(mlist[i].interpolation,3,r_prev_key,r_cur_key,interpolationQuality,ref r_keys,ref ir);
+					QuaternionKeyframe r_cur_key=new QuaternionKeyframe(tick, rotation, GetBezierHandle(mlist[i].interpolation,3,0), GetBezierHandle(mlist[i].interpolation,3,1));
+					QuaternionKeyframe.AddBezierKeyframes(mlist[i].interpolation,3,r_prev_key,r_cur_key,ref r_keys,ref ir);
 					r_prev_key=r_cur_key;
 				}
 				
@@ -329,24 +286,25 @@ namespace MMD
 		//UnityのKeyframeに変換する（移動用）
 		Keyframe[] ToKeyframesForLocation(FloatKeyframe[] custom_keys)
 		{
-			Keyframe[] keys=new Keyframe[custom_keys.Length];
-			for(int i = 0; i < custom_keys.Length; i++)
-			{
-				keys[i]=new Keyframe(custom_keys[i].time,custom_keys[i].value);
-				//線形補間する
-				keys[i].tangentMode=TangentModeBothLinear;
-				if(i>0)
-				{
-					float t=GetLinearTangentForPosition(keys[i-1],keys[i]);
-					keys[i-1].outTangent=t;
-					keys[i].inTangent=t;
-				}
+			Keyframe[] result = custom_keys.Select(x=>new Keyframe(x.time, x.value)).ToArray();
+			
+			for (int i = 0, i_max = result.Length - 1; i < i_max; i++) {
+				float base_tangent = GetLinearTangentForPosition(result[i], result[i+1]);
+			
+				CurveUtility_SetKeyBroken(ref result[i], true);
+				CurveUtility_SetKeyTangentMode(ref result[i], true, CurveUtility_TangentMode.Editable);
+				result[i].outTangent = custom_keys[i].in_vector.y / custom_keys[i].in_vector.x * base_tangent;
+				
+				CurveUtility_SetKeyBroken(ref result[i+1], false);
+				CurveUtility_SetKeyTangentMode(ref result[i+1], false, CurveUtility_TangentMode.Editable);
+				result[i+1].inTangent = (1.0f - custom_keys[i].out_vector.y) / (1.0f - custom_keys[i].out_vector.x) * base_tangent;
 			}
-			AddDummyKeyframe(ref keys);
-			return keys;
+			
+			AddDummyKeyframe(ref result);
+			return result;
 		}
 		// 移動のみの抽出
-		void CreateKeysForLocation(MMD.VMD.VMDFormat format, AnimationClip clip, string current_bone, string bone_path, int interpolationQuality, GameObject current_obj = null)
+		void CreateKeysForLocation(MMD.VMD.VMDFormat format, AnimationClip clip, string current_bone, string bone_path, GameObject current_obj = null)
 		{
 			try
 			{
@@ -356,9 +314,9 @@ namespace MMD
 				
 				List<MMD.VMD.VMDFormat.Motion> mlist = format.motion_list.motion[current_bone];
 				
-				int keyframeCountX = GetKeyframeCount(mlist, 0, interpolationQuality);
-				int keyframeCountY = GetKeyframeCount(mlist, 1, interpolationQuality); 
-				int keyframeCountZ = GetKeyframeCount(mlist, 2, interpolationQuality);
+				int keyframeCountX = GetKeyframeCount(mlist, 0);
+				int keyframeCountY = GetKeyframeCount(mlist, 1); 
+				int keyframeCountZ = GetKeyframeCount(mlist, 2);
 				
 				FloatKeyframe[] lx_keys = new FloatKeyframe[keyframeCountX];
 				FloatKeyframe[] ly_keys = new FloatKeyframe[keyframeCountY];
@@ -372,18 +330,16 @@ namespace MMD
 				int iz=0;
 				for (int i = 0; i < mlist.Count; i++)
 				{
-					const float tick_time = 1.0f / 30.0f;
+					float tick = mlist[i].flame_no * c_frame_to_time;
 					
-					float tick = mlist[i].flame_no * tick_time;
-					
-					FloatKeyframe lx_cur_key=new FloatKeyframe(tick,mlist[i].location.x * scale_ + default_position.x);
-					FloatKeyframe ly_cur_key=new FloatKeyframe(tick,mlist[i].location.y * scale_ + default_position.y);
-					FloatKeyframe lz_cur_key=new FloatKeyframe(tick,mlist[i].location.z * scale_ + default_position.z);
+					FloatKeyframe lx_cur_key=new FloatKeyframe(tick,mlist[i].location.x * scale_ + default_position.x, GetBezierHandle(mlist[i].interpolation,0,0), GetBezierHandle(mlist[i].interpolation,0,1));
+					FloatKeyframe ly_cur_key=new FloatKeyframe(tick,mlist[i].location.y * scale_ + default_position.y, GetBezierHandle(mlist[i].interpolation,1,0), GetBezierHandle(mlist[i].interpolation,1,1));
+					FloatKeyframe lz_cur_key=new FloatKeyframe(tick,mlist[i].location.z * scale_ + default_position.z, GetBezierHandle(mlist[i].interpolation,2,0), GetBezierHandle(mlist[i].interpolation,2,1));
 					
 					// 各軸別々に補間が付いてる
-					FloatKeyframe.AddBezierKeyframes(mlist[i].interpolation,0,lx_prev_key,lx_cur_key,interpolationQuality,ref lx_keys,ref ix);
-					FloatKeyframe.AddBezierKeyframes(mlist[i].interpolation,1,ly_prev_key,ly_cur_key,interpolationQuality,ref ly_keys,ref iy);
-					FloatKeyframe.AddBezierKeyframes(mlist[i].interpolation,2,lz_prev_key,lz_cur_key,interpolationQuality,ref lz_keys,ref iz);
+					FloatKeyframe.AddBezierKeyframes(mlist[i].interpolation,0,lx_prev_key,lx_cur_key,ref lx_keys,ref ix);
+					FloatKeyframe.AddBezierKeyframes(mlist[i].interpolation,1,ly_prev_key,ly_cur_key,ref ly_keys,ref iy);
+					FloatKeyframe.AddBezierKeyframes(mlist[i].interpolation,2,lz_prev_key,lz_cur_key,ref lz_keys,ref iz);
 					
 					lx_prev_key=lx_cur_key;
 					ly_prev_key=ly_cur_key;
@@ -415,29 +371,23 @@ namespace MMD
 
 		void CreateKeysForSkin(MMD.VMD.VMDFormat format, AnimationClip clip)
 		{
-			const float tick_time = 1f / 30f;
+			foreach (var skin in format.skin_list.skin) {
+				Keyframe[] keyframe = skin.Value.Select(x=>new Keyframe(x.flame_no * c_frame_to_time, x.weight)).ToArray();
 
-				// 全ての表情に打たれているキーフレームを探索
-				List<VMD.VMDFormat.SkinData> s;
-
-			foreach (var skin in format.skin_list.skin)
-			{
-				s = skin.Value;
-				Keyframe[] keyframe = new Keyframe[skin.Value.Count];
-
-				// キーフレームの登録を行う
-				for (int i = 0; i < skin.Value.Count; i++) 
-				{
-					keyframe[i] = new Keyframe(s[i].flame_no * tick_time, s[i].weight);
-					//線形補間する
-					keyframe[i].tangentMode=TangentModeBothLinear;
-						if(i>0)
-					{
-						float t=GetLinearTangentForPosition(keyframe[i-1],keyframe[i]);
-						keyframe[i-1].outTangent=t;
-						keyframe[i].inTangent=t;
-						}
+				for (int i = 0, i_max = keyframe.Length - 1; i < i_max; i++) {
+					float delta_time = keyframe[i+1].time - keyframe[i].time;
+					float delta_value = keyframe[i+1].value - keyframe[i].value;
+					float base_tangent = delta_value / delta_time;
+					
+					CurveUtility_SetKeyBroken(ref keyframe[i], true);
+					CurveUtility_SetKeyTangentMode(ref keyframe[i], true, CurveUtility_TangentMode.Editable);
+					keyframe[i].outTangent = base_tangent;
+					
+					CurveUtility_SetKeyBroken(ref keyframe[i+1], false);
+					CurveUtility_SetKeyTangentMode(ref keyframe[i+1], false, CurveUtility_TangentMode.Editable);
+					keyframe[i+1].inTangent = base_tangent;
 				}
+				
 				AddDummyKeyframe(ref keyframe);
 
 				// Z軸移動にキーフレームを打つ
@@ -492,8 +442,7 @@ namespace MMD
 			// dicには全てのボーンの名前, ボーンのパス名が入る
 		}
 		
-		// 無駄なカーブを登録してるけどどうするか
-		void FullEntryBoneAnimation(MMD.VMD.VMDFormat format, AnimationClip clip, Dictionary<string, string> dic, Dictionary<string, GameObject> obj, int interpolationQuality)
+		void FullEntryBoneAnimation(MMD.VMD.VMDFormat format, AnimationClip clip, Dictionary<string, string> dic, Dictionary<string, GameObject> obj)
 		{
 			foreach (KeyValuePair<string, string> p in dic)	// keyはtransformの名前, valueはパス
 			{
@@ -511,8 +460,8 @@ namespace MMD
 				}
 				
 				// キーフレの登録
-				CreateKeysForLocation(format, clip, p.Key, p.Value, interpolationQuality, current_obj);
-				CreateKeysForRotation(format, clip, p.Key, p.Value, interpolationQuality);
+				CreateKeysForLocation(format, clip, p.Key, p.Value, current_obj);
+				CreateKeysForRotation(format, clip, p.Key, p.Value);
 			}
 		}
 
@@ -536,6 +485,68 @@ namespace MMD
 				GetGameObjects(obj, transf.gameObject);
 			}
 		}
+		
+		/// <summary>
+		/// KeyframeのTangentMode値
+		/// </summary>
+		[System.Flags]
+		enum CurveUtility_TangentMode
+		{
+			Editable = 0,
+			Smooth = 1,
+			Linear = 2,
+			Stepped = 3
+		}
+		
+		/// <summary>
+		/// キーフレームのモード設定
+		/// </summary>
+		/// <param name='key'>設定するキーフレーム</param>
+		/// <param name='is_right'>設定する方向は右か</param>
+		/// <param name='mode'>設定するモード</param>
+		static void CurveUtility_SetKeyTangentMode(ref Keyframe key, bool is_right, CurveUtility_TangentMode mode)
+		{
+#if false
+			int left_right = ((is_right)? 1: 0);
+
+			Types.GetType("UnityEditor.CurveUtility", "UnityEditor.dll")
+				.InvokeMember("SetKeyTangentMode"
+							, BindingFlags.Public | BindingFlags.Static | BindingFlags.InvokeMethod
+							, null
+							, null
+							, new object[]{key, left_right, mode}
+				);
+#else
+			if ( !is_right ) {
+				key.tangentMode &= -7;
+				key.tangentMode |= (int)mode << 1;
+			} else {
+				key.tangentMode &= -25;
+				key.tangentMode |= (int)mode << 3;
+			}
+#endif
+		}
+		
+		/// <summary>
+		/// キーフレームの破壊設定
+		/// </summary>
+		/// <param name='key'>設定するキーフレーム</param>
+		/// <param name='is_right'>破壊されているか</param>
+		static void CurveUtility_SetKeyBroken(ref Keyframe key, bool is_break)
+		{
+#if false
+			System.Type t = Types.GetType("UnityEditor.CurveUtility", "UnityEditor.dll");
+			MethodInfo mi = t.GetMethod("SetKeyBroken"
+										, BindingFlags.Public | BindingFlags.Static
+										);
+			mi.Invoke(null, new object[]{key, is_break});
+#else
+			key.tangentMode &= -2;
+			if (is_break) {
+				key.tangentMode |= 1;
+			}
+#endif
+		}
 
 		/// <summary>
 		/// アニメーションタイプの設定
@@ -557,5 +568,7 @@ namespace MMD
 		}
 		
 		private float scale_ = 1.0f;
+		
+		static readonly float c_frame_to_time = 1.0f / 30.0f;
 	}
 }
