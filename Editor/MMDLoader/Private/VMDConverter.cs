@@ -206,8 +206,6 @@ namespace MMD
 				return (delta_value-360f)/(to_keyframe.time-from_keyframe.time);
 			}
 		}
-		//アニメーションエディタでBothLinearを選択したときの値
-		private const int TangentModeBothLinear=21;
 		
 		//UnityのKeyframeに変換する（回転用）
 		void ToKeyframesForRotation(QuaternionKeyframe[] custom_keys,ref Keyframe[] rx_keys,ref Keyframe[] ry_keys,ref Keyframe[] rz_keys)
@@ -222,11 +220,13 @@ namespace MMD
 					
 					CurveUtility_SetKeyBroken(ref keys[i], true);
 					CurveUtility_SetKeyTangentMode(ref keys[i], true, CurveUtility_TangentMode.Editable);
-					keys[i].outTangent = custom_keys[i].in_vector.y / custom_keys[i].in_vector.x * base_tangent;
+					keys[i].outTangent = custom_keys[i+1].in_vector.y / custom_keys[i+1].in_vector.x * base_tangent;
+					keys[i].outTangent = Mathf.Clamp(keys[i].outTangent, c_tangent_min, c_tangent_max);
 					
 					CurveUtility_SetKeyBroken(ref keys[i+1], false);
 					CurveUtility_SetKeyTangentMode(ref keys[i+1], false, CurveUtility_TangentMode.Editable);
-					keys[i+1].inTangent = (1.0f - custom_keys[i].out_vector.y) / (1.0f - custom_keys[i].out_vector.x) * base_tangent;
+					keys[i+1].inTangent = (1.0f - custom_keys[i+1].out_vector.y) / (1.0f - custom_keys[i+1].out_vector.x) * base_tangent;
+					keys[i+1].inTangent = Mathf.Clamp(keys[i+1].inTangent, c_tangent_min, c_tangent_max);
 				}
 				
 				AddDummyKeyframe(ref keys);
@@ -293,11 +293,13 @@ namespace MMD
 			
 				CurveUtility_SetKeyBroken(ref result[i], true);
 				CurveUtility_SetKeyTangentMode(ref result[i], true, CurveUtility_TangentMode.Editable);
-				result[i].outTangent = custom_keys[i].in_vector.y / custom_keys[i].in_vector.x * base_tangent;
+				result[i].outTangent = custom_keys[i+1].in_vector.y / custom_keys[i+1].in_vector.x * base_tangent;
+				result[i].outTangent = Mathf.Clamp(result[i].outTangent, c_tangent_min, c_tangent_max);
 				
 				CurveUtility_SetKeyBroken(ref result[i+1], false);
 				CurveUtility_SetKeyTangentMode(ref result[i+1], false, CurveUtility_TangentMode.Editable);
-				result[i+1].inTangent = (1.0f - custom_keys[i].out_vector.y) / (1.0f - custom_keys[i].out_vector.x) * base_tangent;
+				result[i+1].inTangent = (1.0f - custom_keys[i+1].out_vector.y) / (1.0f - custom_keys[i+1].out_vector.x) * base_tangent;
+				result[i+1].inTangent = Mathf.Clamp(result[i+1].inTangent, c_tangent_min, c_tangent_max);
 			}
 			
 			AddDummyKeyframe(ref result);
@@ -570,5 +572,7 @@ namespace MMD
 		private float scale_ = 1.0f;
 		
 		static readonly float c_frame_to_time = 1.0f / 30.0f;
+		static readonly float c_tangent_min = -Mathf.Sqrt(float.MaxValue);
+		static readonly float c_tangent_max = Mathf.Sqrt(float.MaxValue);
 	}
 }
