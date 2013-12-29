@@ -147,7 +147,11 @@ public class MuscleMarionette : EditorWindow {
 		if (group_value_[(int)group_index] != value) {
 			//変更が掛かったなら
 			//Undo登録
+#if !UNITY_4_2 //4.3以降
+			Undo.RecordObject(this, "Change Group Value");
+#else
 			Undo.RegisterUndo(this, "Change Group Value");
+#endif
 			//更新
 			switch (group_index) {
 			case Group.All: //ALLなら全グループ更新
@@ -211,7 +215,11 @@ public class MuscleMarionette : EditorWindow {
 					if (muscles_value_[(int)muscle] != value) {
 						//変更が掛かったなら
 						//Undo登録
+#if !UNITY_4_2 //4.3以降
+						Undo.RecordObject(this, "Change Muscle Value");
+#else
 						Undo.RegisterUndo(this, "Change Muscle Value");
+#endif
 						//更新
 						muscles_value_[(int)muscle] = value;
 						
