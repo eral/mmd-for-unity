@@ -82,6 +82,7 @@ namespace MMD {
 			
 			// アセットリストの更新
 			AssetDatabase.Refresh();
+			AssetDatabase.SaveAssets();
 		}
 
 		/// <summary>
