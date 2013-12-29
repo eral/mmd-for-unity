@@ -18,19 +18,18 @@ namespace MMD
 		}
 		
 		/// <summary>
-		/// GameObjectを作成する
+		/// プレファブを作成する
 		/// </summary>
 		/// <param name='format'>内部形式データ</param>
+		/// <param name='prefab_path'>プレファブパス</param>
 		/// <param name='use_rigidbody'>剛体を使用するか</param>
 		/// <param name='animation_type'>アニメーションタイプ</param>
 		/// <param name='use_ik'>IKを使用するか</param>
 		/// <param name='scale'>スケール</param>
-		public static GameObject CreateGameObject(PMXFormat format, bool use_rigidbody, AnimationType animation_type, bool use_ik, float scale) {
-			GameObject result;
+		public static void CreatePrefab(PMXFormat format, string prefab_path, bool use_rigidbody, AnimationType animation_type, bool use_ik, float scale) {
 			using (PMXConverter converter = new PMXConverter()) {
-				result = converter.CreateGameObject_(format, use_rigidbody, animation_type, use_ik, scale);
+				converter.CreatePrefab_(format, prefab_path, use_rigidbody, animation_type, use_ik, scale);
 			}
-			return result;
 		}
 
 		/// <summary>
@@ -52,17 +51,23 @@ namespace MMD
 		}
 		
 		/// <summary>
-		/// GameObjectを作成する
+		/// プレファブを作成する
 		/// </summary>
 		/// <param name='format'>内部形式データ</param>
+		/// <param name='prefab_path'>プレファブパス</param>
 		/// <param name='use_rigidbody'>剛体を使用するか</param>
 		/// <param name='animation_type'>アニメーションタイプ</param>
 		/// <param name='use_ik'>IKを使用するか</param>
 		/// <param name='scale'>スケール</param>
-		private GameObject CreateGameObject_(PMXFormat format, bool use_rigidbody, AnimationType animation_type, bool use_ik, float scale) {
+		private void CreatePrefab_(PMXFormat format, string prefab_path, bool use_rigidbody, AnimationType animation_type, bool use_ik, float scale) {
 			format_ = format;
 			use_ik_ = use_ik;
 			scale_ = scale;
+#if true
+			prefab_ = PrefabUtility.CreateEmptyPrefab(prefab_path);
+#else
+			prefab_ = AssetDatabase.CreateAsset(null, prefab_path);
+#endif
 			root_game_object_ = new GameObject(format_.meta_header.name);
 			MMDEngine engine = root_game_object_.AddComponent<MMDEngine>(); //MMDEngine追加
 			//スケール・エッジ幅
@@ -108,6 +113,7 @@ namespace MMD
 			if (AnimationType.LegacyAnimation != animation_type) {
 				//アニメーター追加
 				AvatarSettingScript avatar_setting = new AvatarSettingScript(root_game_object_, bones);
+#if false
 				switch (animation_type) {
 				case AnimationType.GenericMecanim: //汎用アバターでのMecanim
 					avatar_setting.SettingGenericAvatar();
@@ -123,11 +129,23 @@ namespace MMD
 				string name = GetFilePathString(format_.meta_header.name);
 				string file_name = path + name + ".avatar.asset";
 				avatar_setting.CreateAsset(file_name);
+#else
+				Animator animator;
+				switch (animation_type) {
+				case AnimationType.GenericMecanim: //汎用アバターでのMecanim
+					animator = avatar_setting.SettingGenericAvatar();
+					break;
+				case AnimationType.HumanMecanim: //人型アバターでのMecanim
+					animator = avatar_setting.SettingHumanAvatar();
+					break;
+				default:
+					throw new System.ArgumentException();
+				}
+				AssetDatabase.AddObjectToAsset(animator.avatar, prefab_);
+#endif
 			} else {
 				root_game_object_.AddComponent<Animation>();	// アニメーション追加
 			}
-
-			return root_game_object_;
 		}
 		
 		/// <summary>
@@ -440,6 +458,7 @@ namespace MMD
 		/// <param name='index'>メッシュインデックス</param>
 		void CreateAssetForMesh(Mesh mesh, int index)
 		{
+#if false
 			string path = format_.meta_header.folder + "/Meshes/";
 			if (!System.IO.Directory.Exists(path)) { 
 				AssetDatabase.CreateFolder(format_.meta_header.folder, "Meshes");
@@ -448,6 +467,9 @@ namespace MMD
 			string name = GetFilePathString(format_.meta_header.name);
 			string file_name = path + index.ToString() + "_" + name + ".asset";
 			AssetDatabase.CreateAsset(mesh, file_name);
+#else
+			AssetDatabase.AddObjectToAsset(mesh, prefab_);
+#endif
 		}
 		
 		/// <summary>
@@ -943,6 +965,8 @@ namespace MMD
 		/// </summary>
 		/// <param name='materials'>対象マテリアル</param>
 		void CreateAssetForMaterials(Material[] materials) {
+#if false
+			// 適当なフォルダに投げる
 			string path = format_.meta_header.folder + "/Materials/";
 
 			for (int i = 0, i_max = materials.Length; i < i_max; ++i) {
@@ -950,6 +974,11 @@ namespace MMD
 				string file_name = path + i.ToString() + "_" + name + ".asset";
 				AssetDatabase.CreateAsset(materials[i], file_name);
 			}
+#else
+			for (int i = 0, i_max = materials.Length; i < i_max; ++i) {
+				AssetDatabase.AddObjectToAsset(materials[i], prefab_);
+			}
+#endif
 		}
 		
 		/// <summary>
@@ -1568,16 +1597,17 @@ namespace MMD
 		/// <returns>剛体</returns>
 		GameObject[] CreateRigids()
 		{
+#if false
 			if (!System.IO.Directory.Exists(System.IO.Path.Combine(format_.meta_header.folder, "Physics"))) {
 				AssetDatabase.CreateFolder(format_.meta_header.folder, "Physics");
 			}
+#endif
 			
 			// 剛体の登録
 			GameObject[] result = format_.rigidbody_list.rigidbody.Select(x=>ConvertRigidbody(x)).ToArray();
 			for (uint i = 0, i_max = (uint)result.Length; i < i_max; ++i) {
 				// マテリアルの設定
 				result[i].collider.material = CreatePhysicMaterial(format_.rigidbody_list.rigidbody, i);
-				
 			}
 			
 			return result;
@@ -1662,9 +1692,13 @@ namespace MMD
 			material.staticFriction = rigidbody.friction;
 			material.dynamicFriction = rigidbody.friction;
 			
+#if false
 			string name = GetFilePathString(rigidbody.name);
 			string file_name = format_.meta_header.folder + "/Physics/" + index.ToString() + "_" + name + ".asset";
 			AssetDatabase.CreateAsset(material, file_name);
+#else
+			AssetDatabase.AddObjectToAsset(material, prefab_);
+#endif
 			return material;
 		}
 
@@ -2034,6 +2068,7 @@ namespace MMD
 
 		const uint	c_max_vertex_count_in_mesh = 65535; //meshに含まれる最大頂点数(Unity3D的には65536迄入ると思われるが、ushort.MaxValueは特別な値として使うのでその分を除外)
 
+		Object					prefab_;
 		GameObject				root_game_object_;
 		PMXFormat				format_;
 		bool					use_ik_;
