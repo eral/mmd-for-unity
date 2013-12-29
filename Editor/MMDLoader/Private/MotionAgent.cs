@@ -57,6 +57,7 @@ namespace MMD {
 			}
 			
 			AssetDatabase.ImportAsset(AssetDatabase.GetAssetPath(animation_clip));
+			AssetDatabase.SaveAssets();
 		}
 
 		/// <summary>
