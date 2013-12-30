@@ -51,6 +51,11 @@ namespace MMD
 			if (null != alpha_readable_texture_) {
 				alpha_readable_texture_.Dispose();
 			}
+			//ディレクトリの破棄
+			string temp_dir_path = Application.dataPath + "/../" + format_.meta_header.folder + "/Temp.MmdForUnity/"; //"Asset/"が被るので1階層上がる
+			if (System.IO.Directory.Exists(temp_dir_path)) {
+				System.IO.Directory.Delete(temp_dir_path, true);
+			}
 		}
 		
 		/// <summary>
@@ -457,12 +462,6 @@ namespace MMD
 		/// <param name='creation_info'>メッシュ作成情報</param>
 		Material[][] CreateMaterials(MeshCreationInfo[] creation_info)
 		{
-			// 適当なフォルダに投げる
-			string path = format_.meta_header.folder + "/Materials/";
-			if (!System.IO.Directory.Exists(path)) { 
-				AssetDatabase.CreateFolder(format_.meta_header.folder, "Materials");
-			}
-			
 			//全マテリアルを作成
 			Material[] materials = EntryAttributesForMaterials();
 			CreateAssetForMaterials(materials);
@@ -567,7 +566,7 @@ namespace MMD
 																	.ToArray();
 			alpha_readable_texture_ = new AlphaReadableTexture(texture_path
 															, format_.meta_header.folder + "/"
-															, format_.meta_header.folder + "/Materials/"
+															, format_.meta_header.folder + "/Temp.MmdForUnity/"
 															);
 			return alpha_readable_texture_.textures;
 		}
