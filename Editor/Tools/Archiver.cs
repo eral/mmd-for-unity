@@ -18,7 +18,7 @@ public class Archiver : EditorWindow {
 	/// コンストラクタ
 	/// </summary>
 	Archiver() {
-		c_on_gui_func_table_ = new System.Action[]{OnGUIforExtract, OnGUIforInsert};
+		c_on_gui_func_table_ = new System.Action[]{OnGUIforExtract, OnGUIforInsert, OnGUIforDelete};
 	}
 	
 	/// <summary>
@@ -55,9 +55,9 @@ public class Archiver : EditorWindow {
 	/// </summary>
 	private void OnGUIforInsert() {
 		archive_asset_ = EditorGUILayout.ObjectField("ArchiveAsset", archive_asset_, typeof(Object), false);
-		insert_asset_ = EditorGUILayout.ObjectField("InsertAsset", insert_asset_, typeof(Object), true);
+		target_asset_ = EditorGUILayout.ObjectField("InsertAsset", target_asset_, typeof(Object), true);
 		
-		GUI.enabled = (null != archive_asset_) && (null != insert_asset_);
+		GUI.enabled = (null != archive_asset_) && (null != target_asset_);
 		if (GUILayout.Button("Insert")) {
 			InsertAsset();
 		}
@@ -68,9 +68,37 @@ public class Archiver : EditorWindow {
 	/// </summary>
 	private void InsertAsset() {
 		string archive_asset_path = AssetDatabase.GetAssetPath(archive_asset_);
-		Object insert_instance = Instantiate(insert_asset_);
+		Object insert_instance = Instantiate(target_asset_);
 		AssetDatabase.AddObjectToAsset(insert_instance, archive_asset_path);
 		AssetDatabase.ImportAsset(archive_asset_path);
+	}
+	
+	/// <summary>
+	/// 削除の為のGUI描画
+	/// </summary>
+	private void OnGUIforDelete() {
+		GUI.enabled = false;
+		archive_asset_ = EditorGUILayout.ObjectField("ArchiveAsset", archive_asset_, typeof(Object), false);
+		GUI.enabled = true;
+		target_asset_ = EditorGUILayout.ObjectField("DeleteAsset", target_asset_, typeof(Object), false);
+		if ((null != target_asset_) && AssetDatabase.IsSubAsset(target_asset_)) {
+			archive_asset_ = AssetDatabase.LoadMainAssetAtPath(AssetDatabase.GetAssetPath(target_asset_));
+		} else {
+			archive_asset_ = null;
+		}
+		
+		GUI.enabled = (null != archive_asset_) && (null != target_asset_);
+		if (GUILayout.Button("Delete")) {
+			DeleteAsset();
+			AssetDatabase.SaveAssets();
+		}
+	}
+	
+	/// <summary>
+	/// 削除
+	/// </summary>
+	private void DeleteAsset() {
+		DestroyImmediate(target_asset_, true);
 	}
 	
 	/// <summary>
@@ -79,6 +107,7 @@ public class Archiver : EditorWindow {
 	private enum Mode {
 		Extract,	//抽出
 		Insert,		//挿入
+		Delete,		//削除
 	}
 	
 	private readonly System.Action[] c_on_gui_func_table_;
@@ -86,5 +115,5 @@ public class Archiver : EditorWindow {
 	private Mode	mode_				= Mode.Extract;
 	private Object	archive_asset_		= null;
 	private string	extract_asset_name_	= "Assets/extract.asset";
-	private Object	insert_asset_		= null;
+	private Object	target_asset_		= null;
 }
