@@ -69,6 +69,7 @@ public class Archiver : EditorWindow {
 	private void InsertAsset() {
 		string archive_asset_path = AssetDatabase.GetAssetPath(archive_asset_);
 		Object insert_instance = Instantiate(target_asset_);
+		insert_instance.name = target_asset_.name;
 		AssetDatabase.AddObjectToAsset(insert_instance, archive_asset_path);
 		AssetDatabase.ImportAsset(archive_asset_path);
 	}
