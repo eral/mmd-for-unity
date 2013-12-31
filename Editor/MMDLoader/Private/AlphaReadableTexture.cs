@@ -42,10 +42,7 @@ public class AlphaReadableTexture : System.IDisposable {
 			DeleteReadableTexture(texture_path);
 		}
 		//ディレクトリの破棄
-		string path = Application.dataPath + "/../" + temporary_directory_; //"Asset/"が被るので1階層上がる
-		if (System.IO.Directory.Exists(path)) {
-			System.IO.Directory.Delete(path, true);
-		}
+		FileUtil.DeleteFileOrDirectory(temporary_directory_);
 	}
 	
 	/// <summary>
