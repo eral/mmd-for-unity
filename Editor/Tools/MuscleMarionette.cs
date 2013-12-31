@@ -64,14 +64,18 @@ public class MuscleMarionette : EditorWindow {
 			//更新が有ったなら
 			MMDEngine mmd_engine = animator_.GetComponent<MMDEngine>();
 			if (null != mmd_engine) {
+#if UNITY_4_2 //4.2以前
 				//ボーン外のTransformが初期化されるので保存
 				MmdBackupTransform[] mmd_backup_transforms = BackupMmdTransform();
+#endif
 
 				//ポーズ更新
 				ApplyMusclesValue();
 
+#if UNITY_4_2 //4.2以前
 				//ボーン外のTransformが復元
 				RollbackMmdTransform(mmd_backup_transforms);
+#endif
 
 				//MMDEngine更新
 				mmd_engine.LateUpdate();
@@ -275,6 +279,7 @@ public class MuscleMarionette : EditorWindow {
 		}
 	}
 	
+#if UNITY_4_2 //4.2以前
 	/// <summary>
 	/// MMDモデル保存用トランスフォーム
 	/// </summary>
@@ -327,6 +332,7 @@ public class MuscleMarionette : EditorWindow {
 			}
 		}
 	}
+#endif
 	
 	/// <summary>
 	/// MMDEngineの有効化
