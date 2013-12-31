@@ -50,6 +50,10 @@ public class MuscleMarionette : EditorWindow {
 			//Animatorは設定されたがAvatarが取得出来無いなら
 			is_dirty = OnGUIforNoSetAvatarErrorMessage() || is_dirty;
 		}
+		if ((null != animator_) && (null == animator_.runtimeAnimatorController)) {
+			//Animatorは設定されたがAnimatorControllerが取得出来無いなら
+			is_dirty = OnGUIforNoSetControllerErrorMessage() || is_dirty;
+		}
 		GUI.enabled = (null != avatar);
 		is_dirty = OnGUIforGroup() || is_dirty;
 		is_dirty = OnGUIforMuscles() || is_dirty;
@@ -247,7 +251,18 @@ public class MuscleMarionette : EditorWindow {
 		return is_update;
 	}
 	
-
+	/// <summary>
+	/// AnimatorController未設定エラーの為のGUI描画
+	/// </summary>
+	/// <returns>更新が有ったか(true:更新有り, false:未更新)</returns>
+	private bool OnGUIforNoSetControllerErrorMessage() {
+		bool is_update = false;
+		
+		EditorGUILayout.LabelField("no set animator controller in animator.");
+		
+		return is_update;
+	}
+	
 	/// <summary>
 	/// Muscles値の反映
 	/// </summary>
