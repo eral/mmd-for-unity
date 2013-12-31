@@ -52,10 +52,7 @@ namespace MMD
 				alpha_readable_texture_.Dispose();
 			}
 			//ディレクトリの破棄
-			string temp_dir_path = Application.dataPath + "/../" + format_.meta_header.folder + "/Temp.MmdForUnity/"; //"Asset/"が被るので1階層上がる
-			if (System.IO.Directory.Exists(temp_dir_path)) {
-				System.IO.Directory.Delete(temp_dir_path, true);
-			}
+			FileUtil.DeleteFileOrDirectory(format_.meta_header.folder + "/Temp.MmdForUnity/");
 		}
 		
 		/// <summary>
