@@ -21,6 +21,8 @@ public class MuscleMarionette : EditorWindow {
 	static MuscleMarionette() {
 		group_tree_displays_ = true;
 		limb_tree_displays_ = Enumerable.Repeat(false, System.Enum.GetValues(typeof(Limb)).Length).ToArray();
+		AvatarUtility_SetHumanPose_ = Types.GetType("UnityEditor.AvatarUtility", "UnityEditor.dll")
+											.GetMethod("SetHumanPose", BindingFlags.Public | BindingFlags.Static);
 	}
 	
 	/// <summary>
@@ -268,13 +270,8 @@ public class MuscleMarionette : EditorWindow {
 	/// </summary>
 	private void ApplyMusclesValue() {
 		if ((null != animator_) && (null != animator_.avatar)) {
-			Types.GetType("UnityEditor.AvatarUtility", "UnityEditor.dll")
-				.InvokeMember("SetHumanPose"
-							, BindingFlags.Public | BindingFlags.Static | BindingFlags.InvokeMethod
-							, null
-							, null
-							, new object[]{animator_, muscles_value_}
-							);
+			AvatarUtility_SetHumanPose_.Invoke(null, new object[]{animator_, muscles_value_});
+			SceneView.RepaintAll();
 		}
 	}
 	
@@ -491,8 +488,9 @@ public class MuscleMarionette : EditorWindow {
 	private float[] group_value_ = null;
 	private float[] muscles_value_ = null;
 
-	private static	bool	group_tree_displays_;	//グループツリー表示
-	private static	bool[]	limb_tree_displays_;	//四肢ツリー表示
+	private static	bool		group_tree_displays_;	//グループツリー表示
+	private static	bool[]		limb_tree_displays_;	//四肢ツリー表示
+	private static	MethodInfo	AvatarUtility_SetHumanPose_;	//UnityEditor.dll/UnityEditor.AvatarUtility/SetHumanPoseのリフレクションキャッシュ
 
 	private static readonly HumanBodyMuscles[][] c_muscles_list_in_group = new [] {
 		new []{	//Group.All
