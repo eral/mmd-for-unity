@@ -51,10 +51,15 @@ public class MuscleMarionette : EditorWindow {
 		if ((null != animator_) && (null == avatar)) {
 			//Animatorは設定されたがAvatarが取得出来無いなら
 			is_dirty = OnGUIforNoSetAvatarErrorMessage() || is_dirty;
-		}
-		if ((null != animator_) && (null == animator_.runtimeAnimatorController)) {
+			muscles_minmax_ = null;
+		} else if ((null != animator_) && (null == animator_.runtimeAnimatorController)) {
 			//Animatorは設定されたがAnimatorControllerが取得出来無いなら
 			is_dirty = OnGUIforNoSetControllerErrorMessage() || is_dirty;
+			muscles_minmax_ = null;
+		} else if (is_dirty) {
+			//動作可能の最初のフレームなら
+			muscles_minmax_ = GetLimitMinMaxFromAvatar(avatar);
+			PoseToValue();
 		}
 		GUI.enabled = (null != avatar);
 		is_dirty = OnGUIforGroup() || is_dirty;
@@ -279,6 +284,13 @@ public class MuscleMarionette : EditorWindow {
 		}
 	}
 	
+	/// <summary>
+	/// ポーズから値を設定
+	/// </summary>
+	void PoseToValue() {
+		ResetValue();
+	}
+	
 #if UNITY_4_2 //4.2以前
 	/// <summary>
 	/// MMDモデル保存用トランスフォーム
@@ -347,6 +359,48 @@ public class MuscleMarionette : EditorWindow {
 			//付与親等を更新
 			mmd_engine.LateUpdate();
 		}
+	}
+	
+	/// <summary>
+	/// アバターからMuscleのMin,Max値を取得する
+	/// </summary>
+	/// <returns>Min,Max値のクォータニオン配列(Quaternion[Muscleインデックス][min=0,max=1])</returns>
+	/// <param name="avatar">アバター</param>
+	private static Quaternion[][] GetLimitMinMaxFromAvatar(Avatar avatar) {
+		SerializedObject so_avatar = new SerializedObject(avatar);
+		SerializedProperty sp_axes_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_Skeleton.data.m_AxesArray");
+
+		Quaternion[][] result = new Quaternion[sp_axes_array.arraySize][];
+		for (int i = 0, i_max = result.Length; i < i_max; ++i) {
+			var float_limit = new float[2][];
+			var sp_limit = sp_axes_array.GetArrayElementAtIndex(i).FindPropertyRelative("m_Limit");
+			{
+				var sp_unit = sp_limit.FindPropertyRelative("m_Min");
+				sp_unit.Next(true);
+				float_limit[0] = new float[4];
+				for (int k = 0, k_max = float_limit[0].Length; k < k_max; ++k) {
+					float_limit[0][k] = sp_unit.floatValue;
+					sp_unit.Next(false);
+				}
+				//sp_unit.Dispose();
+			}
+			{
+				var sp_unit = sp_limit.FindPropertyRelative("m_Max");
+				sp_unit.Next(true);
+				float_limit[1] = new float[4];
+				for (int k = 0, k_max = float_limit[1].Length; k < k_max; ++k) {
+					float_limit[1][k] = sp_unit.floatValue;
+					sp_unit.Next(false);
+				}
+				//sp_unit.Dispose();
+			}
+			//sp_limit.Dispose();
+			result[i] = float_limit.Select(x=>new Quaternion(x[0], x[1], x[2], x[3])).ToArray();
+		}
+		//sp_axes_array.Dispose();
+		//so_avatar.Dispose();
+
+		return result;
 	}
 
 	/// <summary>
@@ -493,7 +547,8 @@ public class MuscleMarionette : EditorWindow {
 	private Animator animator_ = null;
 	private float[] group_value_ = null;
 	private float[] muscles_value_ = null;
-
+	private Quaternion[][] muscles_minmax_ = null;
+	
 	private static	bool		group_tree_displays_;	//グループツリー表示
 	private static	bool[]		limb_tree_displays_;	//四肢ツリー表示
 	private static	MethodInfo	AvatarUtility_SetHumanPose_;	//UnityEditor.dll/UnityEditor.AvatarUtility/SetHumanPoseのリフレクションキャッシュ
@@ -801,5 +856,138 @@ public class MuscleMarionette : EditorWindow {
 			HumanBodyMuscles.RightFootTwistInOut,
 			HumanBodyMuscles.RightToesUpDown,
 		},
+	};
+
+	private static readonly string[] c_muscles_anim_attribute = new [] {
+		"Spine Front-Back",
+		"Spine Left-Right",
+		"Spine Twist Left-Right",
+		"Chest Front-Back",
+		"Chest Left-Right",
+		"Chest Twist Left-Right",
+		"Neck Nod Down-Up",
+		"Neck Tilt Left-Right",
+		"Neck Turn Left-Right",
+		"Head Nod Down-Up",
+		"Head Tilt Left-Right",
+		"Head Turn Left-Right",
+		"Left Eye Down-Up",
+		"Left Eye In-Out",
+		"Right Eye Down-Up",
+		"Right Eye In-Out",
+		"Jaw Close",
+		"Jaw Left-Right",
+		"Left Upper Leg Front-Back",
+		"Left Upper Leg In-Out",
+		"Left Upper Leg Twist In-Out",
+		"Left Lower Leg Stretch",
+		"Left Lower Leg Twist In-Out",
+		"Left Foot Up-Down",
+		"Left Foot Twist In-Out",
+		"Left Toes Up-Down",
+		"Right Upper Leg Front-Back",
+		"Right Upper Leg In-Out",
+		"Right Upper Leg Twist In-Out",
+		"Right Lower Leg Stretch",
+		"Right Lower Leg Twist In-Out",
+		"Right Foot Up-Down",
+		"Right Foot Twist In-Out",
+		"Right Toes Up-Down",
+		"Left Shoulder Down-Up",
+		"Left Shoulder Front-Back",
+		"Left Arm Down-Up",
+		"Left Arm Front-Back",
+		"Left Arm Twist In-Out",
+		"Left Forearm Stretch",
+		"Left Forearm Twist In-Out",
+		"Left Hand Down-Up",
+		"Left Hand In-Out",
+		"Right Shoulder Down-Up",
+		"Right Shoulder Front-Back",
+		"Right Arm Down-Up",
+		"Right Arm Front-Back",
+		"Right Arm Twist In-Out",
+		"Right Forearm Stretch",
+		"Right Forearm Twist In-Out",
+		"Right Hand Down-Up",
+		"Right Hand In-Out",
+		"LeftHand.Thumb.1 Stretched",
+		"LeftHand.Thumb.Spread",
+		"LeftHand.Thumb.2 Stretched",
+		"LeftHand.Thumb.3 Stretched",
+		"LeftHand.Index.1 Stretched",
+		"LeftHand.Index.Spread",
+		"LeftHand.Index.2 Stretched",
+		"LeftHand.Index.3 Stretched",
+		"LeftHand.Middle.1 Stretched",
+		"LeftHand.Middle.Spread",
+		"LeftHand.Middle.2 Stretched",
+		"LeftHand.Middle.3 Stretched",
+		"LeftHand.Ring.1 Stretched",
+		"LeftHand.Ring.Spread",
+		"LeftHand.Ring.2 Stretched",
+		"LeftHand.Ring.3 Stretched",
+		"LeftHand.Little.1 Stretched",
+		"LeftHand.Little.Spread",
+		"LeftHand.Little.2 Stretched",
+		"LeftHand.Little.3 Stretched",
+		"RightHand.Thumb.1 Stretched",
+		"RightHand.Thumb.Spread",
+		"RightHand.Thumb.2 Stretched",
+		"RightHand.Thumb.3 Stretched",
+		"RightHand.Index.1 Stretched",
+		"RightHand.Index.Spread",
+		"RightHand.Index.2 Stretched",
+		"RightHand.Index.3 Stretched",
+		"RightHand.Middle.1 Stretched",
+		"RightHand.Middle.Spread",
+		"RightHand.Middle.2 Stretched",
+		"RightHand.Middle.3 Stretched",
+		"RightHand.Ring.1 Stretched",
+		"RightHand.Ring.Spread",
+		"RightHand.Ring.2 Stretched",
+		"RightHand.Ring.3 Stretched",
+		"RightHand.Little.1 Stretched",
+		"RightHand.Little.Spread",
+		"RightHand.Little.2 Stretched",
+		"RightHand.Little.3 Stretched",
+	};
+
+	private static readonly string[] c_muscles_anim_attribute_sub = new [] {
+		"RootT.x",
+		"RootT.y",
+		"RootT.z",
+		"RootQ.w",
+		"RootQ.x",
+		"RootQ.y",
+		"RootQ.z",
+		"LeftFootT.x",
+		"LeftFootT.y",
+		"LeftFootT.z",
+		"LeftFootQ.w",
+		"LeftFootQ.x",
+		"LeftFootQ.y",
+		"LeftFootQ.z",
+		"RightFootT.x",
+		"RightFootT.y",
+		"RightFootT.z",
+		"RightFootQ.w",
+		"RightFootQ.x",
+		"RightFootQ.y",
+		"RightFootQ.z",
+		"LeftHandT.x",
+		"LeftHandT.y",
+		"LeftHandT.z",
+		"LeftHandQ.w",
+		"LeftHandQ.x",
+		"LeftHandQ.y",
+		"LeftHandQ.z",
+		"RightHandT.x",
+		"RightHandT.y",
+		"RightHandT.z",
+		"RightHandQ.w",
+		"RightHandQ.x",
+		"RightHandQ.y",
+		"RightHandQ.z",
 	};
 }
