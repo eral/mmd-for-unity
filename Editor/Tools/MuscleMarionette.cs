@@ -48,11 +48,14 @@ public class MuscleMarionette : EditorWindow {
 		
 		is_dirty = OnGUIforAnimator() || is_dirty;
 		Avatar avatar = ((null != animator_)? animator_.avatar: null);
-		if ((null != animator_) && (null == avatar)) {
+		if (null == animator_) {
+			//Animator未設定なら
+			//empty.
+		} else if (null == avatar) {
 			//Animatorは設定されたがAvatarが取得出来無いなら
 			is_dirty = OnGUIforNoSetAvatarErrorMessage() || is_dirty;
 			muscles_minmax_ = null;
-		} else if ((null != animator_) && (null == animator_.runtimeAnimatorController)) {
+		} else if (null == animator_.runtimeAnimatorController) {
 			//Animatorは設定されたがAnimatorControllerが取得出来無いなら
 			is_dirty = OnGUIforNoSetControllerErrorMessage() || is_dirty;
 			muscles_minmax_ = null;
