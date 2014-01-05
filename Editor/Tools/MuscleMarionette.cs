@@ -61,6 +61,7 @@ public class MuscleMarionette : EditorWindow {
 			muscles_minmax_ = null;
 		} else if (is_dirty) {
 			//動作可能の最初のフレームなら
+			AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
 			muscles_minmax_ = GetLimitMinMaxFromAvatar(avatar);
 			PoseToValue();
 		}
@@ -291,6 +292,54 @@ public class MuscleMarionette : EditorWindow {
 	/// ポーズから値を設定
 	/// </summary>
 	void PoseToValue() {
+#if false
+		for (int i = 0, i_max = muscles_minmax_.Length; i < i_max; ++i) {
+			string log = c_muscles_anim_attribute[i]
+						+ ": min(" + muscles_minmax_[i][0] + ", " + muscles_minmax_[i][0].eulerAngles
+						+ ") max(" + muscles_minmax_[i][1] + ", " + muscles_minmax_[i][1].eulerAngles
+						+ ")";
+			Debug.Log(log);
+		}
+#endif
+		{
+			string log = "HumanTrait.BoneName\n";
+			for (int i = 0, i_max = HumanTrait.BoneCount; i < i_max; ++i) {
+				log += i + "\t" + HumanTrait.BoneName[i] + "\t";
+				int muscle_x = HumanTrait.MuscleFromBone(i, 0);
+				int muscle_y = HumanTrait.MuscleFromBone(i, 1);
+				int muscle_z = HumanTrait.MuscleFromBone(i, 2);
+				if (0 <= muscle_x) {
+					log += muscle_x + "\t";
+					log += ((muscle_x < HumanTrait.MuscleName.Length)? HumanTrait.MuscleName[muscle_x]: muscle_x.ToString()) + "\t";
+				} else {
+					log += "\t\t";
+				}
+				if (0 <= muscle_y) {
+					log += muscle_y + "\t";
+					log += ((muscle_y < HumanTrait.MuscleName.Length)? HumanTrait.MuscleName[muscle_y]: muscle_y.ToString()) + "\t";
+				} else {
+					log += "\t\t";
+				}
+				if (0 <= muscle_z) {
+					log += muscle_z + "\t";
+					log += ((muscle_z < HumanTrait.MuscleName.Length)? HumanTrait.MuscleName[muscle_z]: muscle_z.ToString()) + "\t";
+				} else {
+					log += "\t\t";
+				}
+				log += "\n";
+			}
+			Debug.Log(log);
+		}
+		{
+			string log = "HumanTrait.MuscleName" + "\n";
+			for (int i = 0, i_max = HumanTrait.MuscleCount; i < i_max; ++i) {
+				log += i + "\t" + HumanTrait.MuscleName[i] + "\t";
+				int bone = HumanTrait.BoneFromMuscle(i);
+				log += bone + "\t" + HumanTrait.BoneName[bone] + "\t";
+				log += "\n";
+			}
+			Debug.Log(log);
+		}
 		ResetValue();
 	}
 	
