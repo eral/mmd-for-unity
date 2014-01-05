@@ -54,15 +54,28 @@ public class MuscleMarionette : EditorWindow {
 		} else if (null == avatar) {
 			//Animatorは設定されたがAvatarが取得出来無いなら
 			is_dirty = OnGUIforNoSetAvatarErrorMessage() || is_dirty;
-			muscles_minmax_ = null;
 		} else if (null == animator_.runtimeAnimatorController) {
 			//Animatorは設定されたがAnimatorControllerが取得出来無いなら
 			is_dirty = OnGUIforNoSetControllerErrorMessage() || is_dirty;
-			muscles_minmax_ = null;
 		} else if (is_dirty) {
 			//動作可能の最初のフレームなら
 			AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
-			muscles_minmax_ = GetLimitMinMaxFromAvatar(avatar);
+#if false
+			muscles_value_ = animator_analyzer.GetMuscleValue();
+#endif
+			string test = "";
+			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
+				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
+				test += i + "\t";
+				if (animator_analyzer.HasBoneIndex(bone_index)) {
+					Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+					Quaternion rotation = animator_analyzer.GetRotationTstylePose(bone_index);
+					test += transform.name + "\t";
+					test += rotation.ToString() + "\t";
+				}
+				test += "\n";
+			}
+			Debug.Log(test);
 			PoseToValue();
 		}
 		GUI.enabled = (null != avatar);
@@ -292,54 +305,6 @@ public class MuscleMarionette : EditorWindow {
 	/// ポーズから値を設定
 	/// </summary>
 	void PoseToValue() {
-#if false
-		for (int i = 0, i_max = muscles_minmax_.Length; i < i_max; ++i) {
-			string log = c_muscles_anim_attribute[i]
-						+ ": min(" + muscles_minmax_[i][0] + ", " + muscles_minmax_[i][0].eulerAngles
-						+ ") max(" + muscles_minmax_[i][1] + ", " + muscles_minmax_[i][1].eulerAngles
-						+ ")";
-			Debug.Log(log);
-		}
-#endif
-		{
-			string log = "HumanTrait.BoneName\n";
-			for (int i = 0, i_max = HumanTrait.BoneCount; i < i_max; ++i) {
-				log += i + "\t" + HumanTrait.BoneName[i] + "\t";
-				int muscle_x = HumanTrait.MuscleFromBone(i, 0);
-				int muscle_y = HumanTrait.MuscleFromBone(i, 1);
-				int muscle_z = HumanTrait.MuscleFromBone(i, 2);
-				if (0 <= muscle_x) {
-					log += muscle_x + "\t";
-					log += ((muscle_x < HumanTrait.MuscleName.Length)? HumanTrait.MuscleName[muscle_x]: muscle_x.ToString()) + "\t";
-				} else {
-					log += "\t\t";
-				}
-				if (0 <= muscle_y) {
-					log += muscle_y + "\t";
-					log += ((muscle_y < HumanTrait.MuscleName.Length)? HumanTrait.MuscleName[muscle_y]: muscle_y.ToString()) + "\t";
-				} else {
-					log += "\t\t";
-				}
-				if (0 <= muscle_z) {
-					log += muscle_z + "\t";
-					log += ((muscle_z < HumanTrait.MuscleName.Length)? HumanTrait.MuscleName[muscle_z]: muscle_z.ToString()) + "\t";
-				} else {
-					log += "\t\t";
-				}
-				log += "\n";
-			}
-			Debug.Log(log);
-		}
-		{
-			string log = "HumanTrait.MuscleName" + "\n";
-			for (int i = 0, i_max = HumanTrait.MuscleCount; i < i_max; ++i) {
-				log += i + "\t" + HumanTrait.MuscleName[i] + "\t";
-				int bone = HumanTrait.BoneFromMuscle(i);
-				log += bone + "\t" + HumanTrait.BoneName[bone] + "\t";
-				log += "\n";
-			}
-			Debug.Log(log);
-		}
 		ResetValue();
 	}
 	
@@ -413,48 +378,6 @@ public class MuscleMarionette : EditorWindow {
 		}
 	}
 	
-	/// <summary>
-	/// アバターからMuscleのMin,Max値を取得する
-	/// </summary>
-	/// <returns>Min,Max値のクォータニオン配列(Quaternion[Muscleインデックス][min=0,max=1])</returns>
-	/// <param name="avatar">アバター</param>
-	private static Quaternion[][] GetLimitMinMaxFromAvatar(Avatar avatar) {
-		SerializedObject so_avatar = new SerializedObject(avatar);
-		SerializedProperty sp_axes_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_Skeleton.data.m_AxesArray");
-
-		Quaternion[][] result = new Quaternion[sp_axes_array.arraySize][];
-		for (int i = 0, i_max = result.Length; i < i_max; ++i) {
-			var float_limit = new float[2][];
-			var sp_limit = sp_axes_array.GetArrayElementAtIndex(i).FindPropertyRelative("m_Limit");
-			{
-				var sp_unit = sp_limit.FindPropertyRelative("m_Min");
-				sp_unit.Next(true);
-				float_limit[0] = new float[4];
-				for (int k = 0, k_max = float_limit[0].Length; k < k_max; ++k) {
-					float_limit[0][k] = sp_unit.floatValue;
-					sp_unit.Next(false);
-				}
-				//sp_unit.Dispose();
-			}
-			{
-				var sp_unit = sp_limit.FindPropertyRelative("m_Max");
-				sp_unit.Next(true);
-				float_limit[1] = new float[4];
-				for (int k = 0, k_max = float_limit[1].Length; k < k_max; ++k) {
-					float_limit[1][k] = sp_unit.floatValue;
-					sp_unit.Next(false);
-				}
-				//sp_unit.Dispose();
-			}
-			//sp_limit.Dispose();
-			result[i] = float_limit.Select(x=>new Quaternion(x[0], x[1], x[2], x[3])).ToArray();
-		}
-		//sp_axes_array.Dispose();
-		//so_avatar.Dispose();
-
-		return result;
-	}
-
 	/// <summary>
 	/// グループ分け
 	/// </summary>
@@ -599,7 +522,6 @@ public class MuscleMarionette : EditorWindow {
 	private Animator animator_ = null;
 	private float[] group_value_ = null;
 	private float[] muscles_value_ = null;
-	private Quaternion[][] muscles_minmax_ = null;
 	
 	private static	bool		group_tree_displays_;	//グループツリー表示
 	private static	bool[]		limb_tree_displays_;	//四肢ツリー表示

@@ -197,16 +197,46 @@ public class AnimatorAnalyzer
 	}
 	
 	/// <summary>
-	/// ポーン回転制限値の取得
+	/// Muscle値の取得
 	/// </summary>
-	/// <returns>ポーン回転制限値</returns>
+	/// <returns>(現在の姿勢の)Muscle値</returns>
+	public float[] GetMuscleValue() {
+		float[] result = null;
+		if (null != animator_.avatar) {
+		
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// Tポーズのボーン回転値の取得
+	/// </summary>
+	/// <returns>Tポーズのボーン回転値</returns>
+	public Quaternion GetRotationTstylePose(HumanBodyFullBones index) {
+		if (null == human_transform_for_default_pose_) {
+			human_transform_for_default_pose_ = CreateHumanTransformForDefaultPose();
+		}
+		Quaternion result = Quaternion.identity;
+		int human_index = GetHumanIndexFromBoneIndex(index);
+		if ((uint)human_index < (uint)human_transform_for_default_pose_.Length) {
+			result = human_transform_for_default_pose_[human_index].rotation;
+		} else {
+			throw new System.ArgumentOutOfRangeException();
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// ボーン回転制限値の取得
+	/// </summary>
+	/// <returns>ボーン回転制限値</returns>
 	public Vector3[] GetRotationLimit(HumanBodyFullBones index) {
-		if (null == rotation_limit_) {
-			rotation_limit_ = CreateRotationLimitFromAvatar();
+		if (null == bone_rotation_limit_) {
+			bone_rotation_limit_ = CreateBoneRotationLimit();
 		}
 		Vector3[] result = null;
-		if ((uint)index < (uint)rotation_limit_.Length) {
-			result = rotation_limit_[(int)index];
+		if ((uint)index < (uint)bone_rotation_limit_.Length) {
+			result = bone_rotation_limit_[(int)index];
 		} else {
 			throw new System.ArgumentOutOfRangeException();
 		}
@@ -218,17 +248,17 @@ public class AnimatorAnalyzer
 	/// </summary>
 	/// <returns>Muscle範囲値</returns>
 	public Vector2 GetMuscleLimit(HumanBodyMuscles index) {
-		if (null == rotation_limit_) {
-			rotation_limit_ = CreateRotationLimitFromAvatar();
+		if (null == bone_rotation_limit_) {
+			bone_rotation_limit_ = CreateBoneRotationLimit();
 		}
 		Vector2? result = null;
 		HumanBodyFullBones bone_index = (HumanBodyFullBones)HumanTrait.BoneFromMuscle((int)index);
-		if ((uint)bone_index < (uint)rotation_limit_.Length) {
+		if ((uint)bone_index < (uint)bone_rotation_limit_.Length) {
 			for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
 				HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
 				if (index == muscle_index) {
-					result = new Vector2(rotation_limit_[(int)bone_index][0][axis_index]
-										, rotation_limit_[(int)bone_index][1][axis_index]
+					result = new Vector2(bone_rotation_limit_[(int)bone_index][0][axis_index]
+										, bone_rotation_limit_[(int)bone_index][1][axis_index]
 										);
 					break;
 				}
@@ -241,19 +271,59 @@ public class AnimatorAnalyzer
 	}
 	
 	/// <summary>
+	/// ボーンインデックス所持確認
+	/// </summary>
+	/// <returns>true:所持, false:未所持</returns>
+	/// <param name="index">ボーンインデックス</param>
+	public bool HasBoneIndex(HumanBodyFullBones index) {
+		bool result = false;
+		if ((uint)index < (uint)bone_index_to_human_index_.Length) {
+			var human_index = bone_index_to_human_index_[(int)index];
+			result = HasHumanIndex(human_index);
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// ボーンインデックスからノードトランスフォームの取得
+	/// </summary>
+	/// <returns>ノードトランスフォーム</returns>
+	/// <param name="index">ボーンインデックス</param>
+	public Transform GetTransformFromBoneIndex(HumanBodyFullBones index) {
+		Transform result = null;
+		int human_index = GetHumanIndexFromBoneIndex(index);
+		var path = GetPathFromHumanIndex(human_index);
+		result = GetTransformFromPath(animator_, path);
+		return result;
+	}
+	
+	/// <summary>
+	/// ボーンインデックス所持確認
+	/// </summary>
+	/// <returns>ヒューマンインデックス</returns>
+	/// <param name="index">ボーンインデックス</param>
+	private int GetHumanIndexFromBoneIndex(HumanBodyFullBones index) {
+		int result = -1;
+		if ((uint)index < (uint)bone_index_to_human_index_.Length) {
+			result = bone_index_to_human_index_[(int)index];
+		} else {
+			throw new System.ArgumentOutOfRangeException();
+		}
+		return result;
+	}
+	
+	/// <summary>
 	/// ヒューマンインデックス所持確認
 	/// </summary>
 	/// <returns>true:所持, false:未所持</returns>
 	/// <param name="index">ヒューマンインデックス</param>
-	public bool HasHumanIndex(HumanBodyFullBones index) {
+	private bool HasHumanIndex(int index) {
 		bool result = false;
 		if ((uint)index < (uint)human_index_to_hash_.Length) {
-			var hash = human_index_to_hash_[(int)index];
+			var hash = human_index_to_hash_[index];
 			if (hash_to_path_.ContainsKey(hash)) {
 				result = true;
 			}
-		} else {
-			throw new System.ArgumentOutOfRangeException();
 		}
 		return result;
 	}
@@ -263,7 +333,7 @@ public class AnimatorAnalyzer
 	/// </summary>
 	/// <returns>ノードトランスフォーム</returns>
 	/// <param name="index">ヒューマンインデックス</param>
-	public Transform GetTransformFromHumanIndex(HumanBodyFullBones index) {
+	private Transform GetTransformFromHumanIndex(int index) {
 		Transform result = null;
 		var path = GetPathFromHumanIndex(index);
 		result = GetTransformFromPath(animator_, path);
@@ -275,10 +345,10 @@ public class AnimatorAnalyzer
 	/// </summary>
 	/// <returns>ノードパス</returns>
 	/// <param name="index">ヒューマンインデックス</param>
-	private string GetPathFromHumanIndex(HumanBodyFullBones index) {
+	private string GetPathFromHumanIndex(int index) {
 		string result = null;
 		if ((uint)index < (uint)human_index_to_hash_.Length) {
-			var hash = human_index_to_hash_[(int)index];
+			var hash = human_index_to_hash_[index];
 			if (hash_to_path_.ContainsKey(hash)) {
 				result = hash_to_path_[hash];
 			}
@@ -351,35 +421,14 @@ public class AnimatorAnalyzer
 	/// <param name="avatar">アバター</param>
 	/// <returns>ハッシュ変換デーブル</returns>
 	private static int[] CreateHumanIndexToHash(Avatar avatar) {
-		int[] result = Enumerable.Repeat(-1, System.Enum.GetValues(typeof(HumanBodyFullBones)).Length)
-								.ToArray();
-
 		SerializedObject so_avatar = new SerializedObject(avatar);
-
-		{ //主ボーン
-			SerializedProperty sp_human_bone_index_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_HumanBoneIndex");
-			for (int i = 0, i_max = sp_human_bone_index_array.arraySize; i < i_max; ++i) {
-				var hash = sp_human_bone_index_array.GetArrayElementAtIndex(i).intValue;
-				result[i] = hash;
-			}
-		}
+		SerializedProperty sp_id_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_Skeleton.data.m_ID");
 		
-		{ //左手
-			SerializedProperty sp_left_hand_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_LeftHand.data");
-			for (int i = 0, i_max = sp_left_hand_array.arraySize; i < i_max; ++i) {
-				var hash = sp_left_hand_array.GetArrayElementAtIndex(i).intValue;
-				result[i + (int)HumanBodyFullBones.LeftThumbProximal] = hash;
-			}
+		int[] result = new int[sp_id_array.arraySize];
+		for (int i = 0, i_max = sp_id_array.arraySize; i < i_max; ++i) {
+			var hash = sp_id_array.GetArrayElementAtIndex(i).intValue;
+			result[i] = hash;
 		}
-		
-		{ //右手
-			SerializedProperty sp_right_hand_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_RightHand.data");
-			for (int i = 0, i_max = sp_right_hand_array.arraySize; i < i_max; ++i) {
-				var hash = sp_right_hand_array.GetArrayElementAtIndex(i).intValue;
-				result[i + (int)HumanBodyFullBones.RightThumbProximal] = hash;
-			}
-		}
-
 		return result;
 	}
 	
@@ -389,14 +438,32 @@ public class AnimatorAnalyzer
 	/// <param name="avatar">アバター</param>
 	/// <returns>ハッシュ変換デーブル</returns>
 	private static int[] CreateBoneIndexToHumanIndex(Avatar avatar) {
+		int[] result = Enumerable.Repeat(-1, System.Enum.GetValues(typeof(HumanBodyFullBones)).Length)
+								.ToArray();
+
 		SerializedObject so_avatar = new SerializedObject(avatar);
-		SerializedProperty sp_id_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_Skeleton.data.m_ID");
-		
-		int[] result = new int[sp_id_array.arraySize];
-		for (int i = 0, i_max = sp_id_array.arraySize; i < i_max; ++i) {
-			var hash = sp_id_array.GetArrayElementAtIndex(i).intValue;
-			result[i] = hash;
+		{ //主ボーン
+			SerializedProperty sp_human_bone_index_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_HumanBoneIndex");
+			for (int i = 0, i_max = sp_human_bone_index_array.arraySize; i < i_max; ++i) {
+				var hash = sp_human_bone_index_array.GetArrayElementAtIndex(i).intValue;
+				result[i] = hash;
+			}
 		}
+		{ //左手
+			SerializedProperty sp_left_hand_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_LeftHand.data.m_HandBoneIndex");
+			for (int i = 0, i_max = sp_left_hand_array.arraySize; i < i_max; ++i) {
+				var hash = sp_left_hand_array.GetArrayElementAtIndex(i).intValue;
+				result[i + (int)HumanBodyFullBones.LeftThumbProximal] = hash;
+			}
+		}
+		{ //右手
+			SerializedProperty sp_right_hand_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_RightHand.data.m_HandBoneIndex");
+			for (int i = 0, i_max = sp_right_hand_array.arraySize; i < i_max; ++i) {
+				var hash = sp_right_hand_array.GetArrayElementAtIndex(i).intValue;
+				result[i + (int)HumanBodyFullBones.RightThumbProximal] = hash;
+			}
+		}
+
 		return result;
 	}
 	
@@ -420,22 +487,22 @@ public class AnimatorAnalyzer
 	}
 	
 	/// <summary>
-	/// アバターからポーンの回転制限値を取得する
+	/// ボーンの回転制限値を取得する
 	/// </summary>
 	/// <returns>回転制限値のベクター配列(Vector3[HumanBodyFullBones][min=0,max=1])</returns>
-	private Vector3[][] CreateRotationLimitFromAvatar() {
+	private Vector3[][] CreateBoneRotationLimit() {
 		SerializedObject so_avatar = new SerializedObject(animator_.avatar);
 		SerializedProperty sp_axes_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_Skeleton.data.m_AxesArray");
 		
 		Vector3[][] result = Enumerable.Repeat(new[]{Vector3.zero, Vector3.zero}, System.Enum.GetValues(typeof(HumanBodyFullBones)).Length)
-									.ToArray();
+										.ToArray();
 		HumanBodyFullBones bone_index = (HumanBodyFullBones)(-1);
 		for (int i = 0, i_max = sp_axes_array.arraySize; i < i_max; ++i) {
-			while (!HasHumanIndex(++bone_index)) {};
+			while (!HasBoneIndex(++bone_index)) {};
 
 			var float_limit = new float[2][];
 			var sp_limit = sp_axes_array.GetArrayElementAtIndex(i).FindPropertyRelative("m_Limit");
-			{
+			{ //最小値
 				var sp_unit = sp_limit.FindPropertyRelative("m_Min");
 				sp_unit.Next(true);
 				float_limit[0] = new float[4];
@@ -444,7 +511,7 @@ public class AnimatorAnalyzer
 					sp_unit.Next(false);
 				}
 			}
-			{
+			{ //最大値
 				var sp_unit = sp_limit.FindPropertyRelative("m_Max");
 				sp_unit.Next(true);
 				float_limit[1] = new float[4];
@@ -458,10 +525,64 @@ public class AnimatorAnalyzer
 		return result;
 	}
 	
+	/// <summary>
+	/// デフォルトポーズのトランスフォームを取得する
+	/// </summary>
+	/// <returns>デフォルトポーズのボーンのトランスフォーム配列(Quaternion[HumanBodyFullBones])</returns>
+	private PortableTransform[] CreateHumanTransformForDefaultPose() {
+		SerializedObject so_avatar = new SerializedObject(animator_.avatar);
+		SerializedProperty sp_transform_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_SkeletonPose.data.m_X");
+		
+		PortableTransform[] result = new PortableTransform[sp_transform_array.arraySize];
+		for (int i = 0, i_max = result.Length; i < i_max; ++i) {
+			var sp_transform = sp_transform_array.GetArrayElementAtIndex(i);
+			
+			PortableTransform transform = new PortableTransform();
+			{ //位置
+				var sp_position = sp_transform.FindPropertyRelative("t");
+				sp_position.Next(true);
+				float[] float4 = new float[4];
+				for (int k = 0, k_max = float4.Length; k < k_max; ++k) {
+					float4[k] = sp_position.floatValue;
+					sp_position.Next(false);
+				}
+				transform.position = new Vector3(float4[0], float4[1], float4[2]);
+			}
+			{ //回転
+				var sp_rotation = sp_transform.FindPropertyRelative("q");
+				sp_rotation.Next(true);
+				float[] float4 = new float[4];
+				for (int k = 0, k_max = float4.Length; k < k_max; ++k) {
+					float4[k] = sp_rotation.floatValue;
+					sp_rotation.Next(false);
+				}
+				transform.rotation = new Quaternion(float4[0], float4[1], float4[2], float4[3]);
+			}
+			{ //拡縮率
+				var sp_scale = sp_transform.FindPropertyRelative("s");
+				sp_scale.Next(true);
+				float[] float4 = new float[4];
+				for (int k = 0, k_max = float4.Length; k < k_max; ++k) {
+					float4[k] = sp_scale.floatValue;
+					sp_scale.Next(false);
+				}
+				transform.scale = new Vector3(float4[0], float4[1], float4[2]);
+			}
+			result[i] = transform;
+		}
+		return result;
+	}
+	
 	private Animator animator_;
 	int[] skeleton_index_to_hash_;
 	int[] human_index_to_hash_;
 	int[] bone_index_to_human_index_;
 	Dictionary<int, string> hash_to_path_;
-	Vector3[][] rotation_limit_ = null;
+	Vector3[][] bone_rotation_limit_ = null;
+	struct PortableTransform {
+		public Vector3		position;
+		public Quaternion	rotation;
+		public Vector3		scale;
+	}
+	PortableTransform[] human_transform_for_default_pose_ = null;
 }
