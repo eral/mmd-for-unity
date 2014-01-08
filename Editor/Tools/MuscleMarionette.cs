@@ -63,6 +63,7 @@ public class MuscleMarionette : EditorWindow {
 #if false
 			muscles_value_ = animator_analyzer.GetMuscleValue();
 #endif
+#if false
 			string test = "";
 			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
 				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
@@ -70,17 +71,45 @@ public class MuscleMarionette : EditorWindow {
 				if (animator_analyzer.HasBoneIndex(bone_index)) {
 					Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
 					Quaternion rotation = animator_analyzer.GetRotationTstylePose(bone_index);
+					Vector3[] limit = animator_analyzer.GetRotationLimit(bone_index);
 					test += transform.name + "\t";
 					test += rotation.ToString() + "\t";
+					test += limit[0].ToString() + "\t" + limit[1].ToString() + "\t";
 				}
 				test += "\n";
 			}
 			Debug.Log(test);
+#endif
+#if false
+			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
+				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
+				Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+				if (null != transform) {
+					Quaternion rotation = animator_analyzer.GetRotationTstylePose(bone_index);
+					transform.localRotation = rotation;
+				}
+			}
+#endif
 			PoseToValue();
 		}
 		GUI.enabled = (null != avatar);
 		is_dirty = OnGUIforGroup() || is_dirty;
 		is_dirty = OnGUIforMuscles() || is_dirty;
+
+#if true
+		if (GUILayout.Button("test")) {
+			AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
+			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
+				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
+				Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+				if (null != transform) {
+//					Quaternion rotation = animator_analyzer.GetRotationDefaultPose(bone_index);
+					Quaternion rotation = animator_analyzer.GetRotationTstylePose(bone_index);
+					transform.localRotation = rotation;
+				}
+			}
+		}
+#endif
 
 		if (is_dirty && (null != animator_)) {
 			//更新が有ったなら

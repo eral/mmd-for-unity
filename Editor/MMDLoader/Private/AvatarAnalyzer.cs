@@ -209,17 +209,39 @@ public class AnimatorAnalyzer
 	}
 	
 	/// <summary>
+	/// 基本ポーズのボーン回転値の取得
+	/// </summary>
+	/// <returns>Tポーズのボーン回転値</returns>
+	public Quaternion GetRotationDefaultPose(HumanBodyFullBones index) {
+		if (null == human_transform_for_t_pose_) {
+			human_transform_for_t_pose_ = CreateHumanTransformForTstylePose();
+		}
+		if (null == bone_axes_information_) {
+			bone_axes_information_ = CreateBoneAxesInformation();
+		}
+		Quaternion result = Quaternion.identity;
+		int human_index = GetHumanIndexFromBoneIndex(index);
+		if (((uint)index < (uint)bone_axes_information_.Length) && ((uint)human_index < (uint)human_transform_for_t_pose_.Length)) {
+//			result = bone_axes_information_[(int)index].pre_quaternion * human_transform_for_t_pose_[human_index].rotation;
+			result = bone_axes_information_[(int)index].pre_quaternion * human_transform_for_t_pose_[human_index].rotation * bone_axes_information_[(int)index].post_quaternion;
+		} else {
+			throw new System.ArgumentOutOfRangeException();
+		}
+		return result;
+	}
+	
+	/// <summary>
 	/// Tポーズのボーン回転値の取得
 	/// </summary>
 	/// <returns>Tポーズのボーン回転値</returns>
 	public Quaternion GetRotationTstylePose(HumanBodyFullBones index) {
-		if (null == human_transform_for_default_pose_) {
-			human_transform_for_default_pose_ = CreateHumanTransformForDefaultPose();
+		if (null == human_transform_for_t_pose_) {
+			human_transform_for_t_pose_ = CreateHumanTransformForTstylePose();
 		}
 		Quaternion result = Quaternion.identity;
 		int human_index = GetHumanIndexFromBoneIndex(index);
-		if ((uint)human_index < (uint)human_transform_for_default_pose_.Length) {
-			result = human_transform_for_default_pose_[human_index].rotation;
+		if ((uint)human_index < (uint)human_transform_for_t_pose_.Length) {
+			result = human_transform_for_t_pose_[human_index].rotation;
 		} else {
 			throw new System.ArgumentOutOfRangeException();
 		}
@@ -231,12 +253,13 @@ public class AnimatorAnalyzer
 	/// </summary>
 	/// <returns>ボーン回転制限値</returns>
 	public Vector3[] GetRotationLimit(HumanBodyFullBones index) {
-		if (null == bone_rotation_limit_) {
-			bone_rotation_limit_ = CreateBoneRotationLimit();
+		if (null == bone_axes_information_) {
+			bone_axes_information_ = CreateBoneAxesInformation();
 		}
 		Vector3[] result = null;
-		if ((uint)index < (uint)bone_rotation_limit_.Length) {
-			result = bone_rotation_limit_[(int)index];
+		if ((uint)index < (uint)bone_axes_information_.Length) {
+			AxesInformation.Limit limit = bone_axes_information_[(int)index].limit;
+			result = new[]{new Vector3(limit.min.x, limit.min.y, limit.min.z), new Vector3(limit.max.x, limit.max.y, limit.max.z)};
 		} else {
 			throw new System.ArgumentOutOfRangeException();
 		}
@@ -248,17 +271,17 @@ public class AnimatorAnalyzer
 	/// </summary>
 	/// <returns>Muscle範囲値</returns>
 	public Vector2 GetMuscleLimit(HumanBodyMuscles index) {
-		if (null == bone_rotation_limit_) {
-			bone_rotation_limit_ = CreateBoneRotationLimit();
+		if (null == bone_axes_information_) {
+			bone_axes_information_ = CreateBoneAxesInformation();
 		}
 		Vector2? result = null;
 		HumanBodyFullBones bone_index = (HumanBodyFullBones)HumanTrait.BoneFromMuscle((int)index);
-		if ((uint)bone_index < (uint)bone_rotation_limit_.Length) {
+		if ((uint)bone_index < (uint)bone_axes_information_.Length) {
 			for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
 				HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
 				if (index == muscle_index) {
-					result = new Vector2(bone_rotation_limit_[(int)bone_index][0][axis_index]
-										, bone_rotation_limit_[(int)bone_index][1][axis_index]
+					result = new Vector2(bone_axes_information_[(int)bone_index].limit.min[axis_index]
+										, bone_axes_information_[(int)bone_index].limit.min[axis_index]
 										);
 					break;
 				}
@@ -487,49 +510,79 @@ public class AnimatorAnalyzer
 	}
 	
 	/// <summary>
-	/// ボーンの回転制限値を取得する
+	/// ボーンの軸情報を取得する
 	/// </summary>
-	/// <returns>回転制限値のベクター配列(Vector3[HumanBodyFullBones][min=0,max=1])</returns>
-	private Vector3[][] CreateBoneRotationLimit() {
+	/// <returns>ボーンの軸情報配列(AxesInformation[HumanBodyFullBones])</returns>
+	private AxesInformation[] CreateBoneAxesInformation() {
 		SerializedObject so_avatar = new SerializedObject(animator_.avatar);
 		SerializedProperty sp_axes_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_Skeleton.data.m_AxesArray");
 		
-		Vector3[][] result = Enumerable.Repeat(new[]{Vector3.zero, Vector3.zero}, System.Enum.GetValues(typeof(HumanBodyFullBones)).Length)
-										.ToArray();
+		AxesInformation[] result = Enumerable.Repeat(new AxesInformation(), System.Enum.GetValues(typeof(HumanBodyFullBones)).Length)
+											.ToArray();
 		HumanBodyFullBones bone_index = (HumanBodyFullBones)(-1);
 		for (int i = 0, i_max = sp_axes_array.arraySize; i < i_max; ++i) {
 			while (!HasBoneIndex(++bone_index)) {};
+			var axes_information = new AxesInformation();
 
-			var float_limit = new float[2][];
-			var sp_limit = sp_axes_array.GetArrayElementAtIndex(i).FindPropertyRelative("m_Limit");
-			{ //最小値
-				var sp_unit = sp_limit.FindPropertyRelative("m_Min");
-				sp_unit.Next(true);
-				float_limit[0] = new float[4];
-				for (int k = 0, k_max = float_limit[0].Length; k < k_max; ++k) {
-					float_limit[0][k] = sp_unit.floatValue;
-					sp_unit.Next(false);
+			var sp_axes = sp_axes_array.GetArrayElementAtIndex(i);
+			{ //PreQ
+				var sp_pre_q = sp_axes.FindPropertyRelative("m_PreQ");
+				sp_pre_q.Next(true);
+				float[] float4 = new float[4];
+				for (int k = 0, k_max = float4.Length; k < k_max; ++k) {
+					float4[k] = sp_pre_q.floatValue;
+					sp_pre_q.Next(false);
+				}
+				axes_information.pre_quaternion = new Quaternion(float4[0], float4[1], float4[2], float4[3]);
+			}
+			{ //PostQ
+				var sp_post_q = sp_axes.FindPropertyRelative("m_PostQ");
+				sp_post_q.Next(true);
+				float[] float4 = new float[4];
+				for (int k = 0, k_max = float4.Length; k < k_max; ++k) {
+					float4[k] = sp_post_q.floatValue;
+					sp_post_q.Next(false);
+				}
+				axes_information.post_quaternion = new Quaternion(float4[0], float4[1], float4[2], float4[3]);
+			}
+			{ //Sign
+				var sp_sign = sp_axes.FindPropertyRelative("m_Sgn");
+				sp_sign.Next(true);
+				for (int k = 0, k_max = 4; k < k_max; ++k) {
+					axes_information.sign[k] = sp_sign.floatValue;
+					sp_sign.Next(false);
 				}
 			}
-			{ //最大値
-				var sp_unit = sp_limit.FindPropertyRelative("m_Max");
-				sp_unit.Next(true);
-				float_limit[1] = new float[4];
-				for (int k = 0, k_max = float_limit[1].Length; k < k_max; ++k) {
-					float_limit[1][k] = sp_unit.floatValue;
-					sp_unit.Next(false);
+			{ //リミット
+				var sp_limit = sp_axes.FindPropertyRelative("m_Limit");
+				{ //最小値
+					var sp_unit = sp_limit.FindPropertyRelative("m_Min");
+					sp_unit.Next(true);
+					for (int k = 0, k_max = 4; k < k_max; ++k) {
+						axes_information.limit.min[k] = sp_unit.floatValue;
+						sp_unit.Next(false);
+					}
+				}
+				{ //最大値
+					var sp_unit = sp_limit.FindPropertyRelative("m_Max");
+					sp_unit.Next(true);
+					for (int k = 0, k_max = 4; k < k_max; ++k) {
+						axes_information.limit.max[k] = sp_unit.floatValue;
+						sp_unit.Next(false);
+					}
 				}
 			}
-			result[(int)bone_index] = float_limit.Select(x=>new Vector3(x[0], x[1], x[2])).ToArray();
+
+			result[(int)bone_index] = axes_information;
 		}
 		return result;
 	}
 	
 	/// <summary>
-	/// デフォルトポーズのトランスフォームを取得する
+	/// Tポーズのトランスフォームを取得する
 	/// </summary>
-	/// <returns>デフォルトポーズのボーンのトランスフォーム配列(Quaternion[HumanBodyFullBones])</returns>
-	private PortableTransform[] CreateHumanTransformForDefaultPose() {
+	/// <returns>Tポーズのボーンのトランスフォーム配列(Quaternion[HumanBodyFullBones])</returns>
+	private PortableTransform[] CreateHumanTransformForTstylePose() {
 		SerializedObject so_avatar = new SerializedObject(animator_.avatar);
 		SerializedProperty sp_transform_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_SkeletonPose.data.m_X");
 		
@@ -578,11 +631,21 @@ public class AnimatorAnalyzer
 	int[] human_index_to_hash_;
 	int[] bone_index_to_human_index_;
 	Dictionary<int, string> hash_to_path_;
-	Vector3[][] bone_rotation_limit_ = null;
+	struct AxesInformation {
+		public struct Limit {
+			public Vector4	min;
+			public Vector4	max;
+		}
+		public Quaternion	pre_quaternion;
+		public Quaternion	post_quaternion;
+		public Vector4		sign;
+		public Limit		limit;
+	}
+	AxesInformation[] bone_axes_information_ = null;
 	struct PortableTransform {
 		public Vector3		position;
 		public Quaternion	rotation;
 		public Vector3		scale;
 	}
-	PortableTransform[] human_transform_for_default_pose_ = null;
+	PortableTransform[] human_transform_for_t_pose_ = null;
 }
