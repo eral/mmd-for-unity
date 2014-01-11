@@ -203,7 +203,37 @@ public class AnimatorAnalyzer
 	public float[] GetMuscleValue() {
 		float[] result = null;
 		if (null != animator_.avatar) {
-		
+			if (null == bone_axes_information_) {
+				bone_axes_information_ = CreateBoneAxesInformation();
+			}
+			
+			//先に戻り値用の配列を確保(後でボーン・軸順に格納していく)
+			result = Enumerable.Repeat(0.0f, System.Enum.GetValues(typeof(HumanBodyMuscles)).Length)
+								.ToArray();
+			
+			//ボーン操作
+			for (HumanBodyFullBones bone_index = (HumanBodyFullBones)0, bone_index_max = (HumanBodyFullBones)System.Enum.GetValues(typeof(HumanBodyFullBones)).Length; bone_index < bone_index_max; ++bone_index) {
+				Vector3 rotation_avatar = GetTransformFromBoneIndex(bone_index).localRotation.eulerAngles;
+				Vector3 rotation_default = GetRotationDefaultPose(bone_index).eulerAngles;
+				Vector3[] rotation_limit = GetRotationLimit(bone_index);
+				//AxesInformation axes_information = bone_axes_information_[(int)bone_index];
+				//軸操作
+				for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
+					HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
+					if ((uint)muscle_index < (uint)result.Length) {
+						float value = rotation_avatar[axis_index] - rotation_default[axis_index];
+						value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 380.0f: value)); //範囲を-180.0f～180.0fに収める
+						if (value < 0) {
+							//標準ポーズより小さいなら
+							value = value / (rotation_limit[0][axis_index] * -180.0f); 
+						} else {
+							//標準ポーズより大きいなら
+							value = value / (rotation_limit[1][axis_index] * 180.0f);
+						}
+						result[(int)muscle_index] = Mathf.Clamp(value, -1.0f, 1.0f);
+					}
+				}
+			}
 		}
 		return result;
 	}

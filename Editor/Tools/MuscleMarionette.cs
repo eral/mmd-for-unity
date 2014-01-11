@@ -59,10 +59,6 @@ public class MuscleMarionette : EditorWindow {
 			is_dirty = OnGUIforNoSetControllerErrorMessage() || is_dirty;
 		} else if (is_dirty) {
 			//動作可能の最初のフレームなら
-			AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
-#if false
-			muscles_value_ = animator_analyzer.GetMuscleValue();
-#endif
 #if false
 			string test = "";
 			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
@@ -364,6 +360,8 @@ public class MuscleMarionette : EditorWindow {
 	/// </summary>
 	void PoseToValue() {
 		ResetValue();
+		AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
+		muscles_value_ = animator_analyzer.GetMuscleValue();
 	}
 	
 #if UNITY_4_2 //4.2以前
