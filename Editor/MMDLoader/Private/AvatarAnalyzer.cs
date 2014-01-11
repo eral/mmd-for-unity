@@ -213,19 +213,26 @@ public class AnimatorAnalyzer
 	/// </summary>
 	/// <returns>Tポーズのボーン回転値</returns>
 	public Quaternion GetRotationDefaultPose(HumanBodyFullBones index) {
-		if (null == human_transform_for_t_pose_) {
-			human_transform_for_t_pose_ = CreateHumanTransformForTstylePose();
-		}
-		if (null == bone_axes_information_) {
-			bone_axes_information_ = CreateBoneAxesInformation();
-		}
 		Quaternion result = Quaternion.identity;
-		int human_index = GetHumanIndexFromBoneIndex(index);
-		if (((uint)index < (uint)bone_axes_information_.Length) && ((uint)human_index < (uint)human_transform_for_t_pose_.Length)) {
-//			result = bone_axes_information_[(int)index].pre_quaternion * human_transform_for_t_pose_[human_index].rotation;
-			result = bone_axes_information_[(int)index].pre_quaternion * human_transform_for_t_pose_[human_index].rotation * bone_axes_information_[(int)index].post_quaternion;
+		if (HumanBodyFullBones.Hips == index) {
+			//腰ボーンなら
+			if (null == human_transform_for_t_pose_) {
+				human_transform_for_t_pose_ = CreateHumanTransformForTstylePose();
+			}
+			int human_index = GetHumanIndexFromBoneIndex(index);
+			if ((uint)human_index < (uint)human_transform_for_t_pose_.Length) {
+				result = human_transform_for_t_pose_[human_index].rotation;
+			}
 		} else {
-			throw new System.ArgumentOutOfRangeException();
+			//腰ボーン以外なら
+			if (null == bone_axes_information_) {
+				bone_axes_information_ = CreateBoneAxesInformation();
+			}
+			if ((uint)index < (uint)bone_axes_information_.Length) {
+				result = bone_axes_information_[(int)index].pre_quaternion * result * Quaternion.Inverse(bone_axes_information_[(int)index].post_quaternion);
+			} else {
+				throw new System.ArgumentOutOfRangeException();
+			}
 		}
 		return result;
 	}
@@ -517,11 +524,18 @@ public class AnimatorAnalyzer
 		SerializedObject so_avatar = new SerializedObject(animator_.avatar);
 		SerializedProperty sp_axes_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_Skeleton.data.m_AxesArray");
 		
+		//AxesArrayはヒューマンインデックスから未割当ボーン分を詰めた独自のインデックス体系を持つ
+		//それをボーンインデックスへと変換する為の配列を作る
+		var axes_array_index_to_bone_index_ = Enumerable.Range(0, bone_index_to_human_index_.Length) //ボーンインデックス-ヒューマンインデックス変換デーブル分の配列を用意する
+														.Select(x=>new {bone_index = x, human_index = bone_index_to_human_index_[x]}) //ボーンインデックス-ヒューマンインデックス変換辞書らしき物を作る
+														.Where(x=>-1 != x.human_index) //未割当ボーン分を除外
+														.OrderBy(x=>x.human_index) //ヒューマンインデックスで並び替え
+														.Select(x=>x.bone_index) //ボーンインデックス取り出し
+														.ToArray(); //配列化
+		
 		AxesInformation[] result = Enumerable.Repeat(new AxesInformation(), System.Enum.GetValues(typeof(HumanBodyFullBones)).Length)
 											.ToArray();
-		HumanBodyFullBones bone_index = (HumanBodyFullBones)(-1);
 		for (int i = 0, i_max = sp_axes_array.arraySize; i < i_max; ++i) {
-			while (!HasBoneIndex(++bone_index)) {};
 			var axes_information = new AxesInformation();
 
 			var sp_axes = sp_axes_array.GetArrayElementAtIndex(i);
@@ -572,8 +586,9 @@ public class AnimatorAnalyzer
 					}
 				}
 			}
-
-			result[(int)bone_index] = axes_information;
+			
+			int bone_index = axes_array_index_to_bone_index_[i];
+			result[bone_index] = axes_information;
 		}
 		return result;
 	}
