@@ -97,17 +97,46 @@ public class MuscleMarionette : EditorWindow {
 		is_dirty = OnGUIforMuscles() || is_dirty;
 
 #if true
-		if (GUILayout.Button("test")) {
+		if (GUILayout.Button("TstylePose")) {
 			AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
 			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
 				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
 				Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
 				if (null != transform) {
-//					Quaternion rotation = animator_analyzer.GetRotationDefaultPose(bone_index);
 					Quaternion rotation = animator_analyzer.GetRotationTstylePose(bone_index);
 					transform.localRotation = rotation;
 				}
 			}
+		}
+		if (GUILayout.Button("DefaultPose")) {
+			AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
+			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
+				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
+				Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+				if (null != transform) {
+					Quaternion rotation = animator_analyzer.GetRotationDefaultPose(bone_index);
+					transform.localRotation = rotation;
+				}
+			}
+		}
+		if (GUILayout.Button("report")) {
+			string log = "";
+			AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
+			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
+				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
+				Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+				
+				log += i + "\t";
+				if (null != transform) {
+					var rotation = transform.localRotation;
+					log += rotation.x + "\t" + rotation.y + "\t" + rotation.z + "\t" + rotation.w + "\t";
+//					var position = transform.localPosition;
+//					log += position.x + "\t" + position.y + "\t" + position.z + "\t";
+				}
+				log += bone_index.ToString() + "\t";
+				log += "\n";
+			}
+			Debug.Log(log);
 		}
 #endif
 
