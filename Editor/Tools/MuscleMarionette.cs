@@ -59,82 +59,13 @@ public class MuscleMarionette : EditorWindow {
 			is_dirty = OnGUIforNoSetControllerErrorMessage() || is_dirty;
 		} else if (is_dirty) {
 			//動作可能の最初のフレームなら
-#if false
-			string test = "";
-			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
-				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
-				test += i + "\t";
-				if (animator_analyzer.HasBoneIndex(bone_index)) {
-					Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
-					Quaternion rotation = animator_analyzer.GetRotationTstylePose(bone_index);
-					Vector3[] limit = animator_analyzer.GetRotationLimit(bone_index);
-					test += transform.name + "\t";
-					test += rotation.ToString() + "\t";
-					test += limit[0].ToString() + "\t" + limit[1].ToString() + "\t";
-				}
-				test += "\n";
-			}
-			Debug.Log(test);
-#endif
-#if false
-			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
-				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
-				Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
-				if (null != transform) {
-					Quaternion rotation = animator_analyzer.GetRotationTstylePose(bone_index);
-					transform.localRotation = rotation;
-				}
-			}
-#endif
 			PoseToValue();
+			muscles_first_value_ = muscles_value_.ToArray();
 		}
 		GUI.enabled = (null != avatar);
+		is_dirty = OnGUIforPoseButton() || is_dirty;
 		is_dirty = OnGUIforGroup() || is_dirty;
 		is_dirty = OnGUIforMuscles() || is_dirty;
-
-#if true
-		if (GUILayout.Button("TstylePose")) {
-			AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
-			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
-				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
-				Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
-				if (null != transform) {
-					Quaternion rotation = animator_analyzer.GetRotationTstylePose(bone_index);
-					transform.localRotation = rotation;
-				}
-			}
-		}
-		if (GUILayout.Button("DefaultPose")) {
-			AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
-			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
-				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
-				Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
-				if (null != transform) {
-					Quaternion rotation = animator_analyzer.GetRotationDefaultPose(bone_index);
-					transform.localRotation = rotation;
-				}
-			}
-		}
-		if (GUILayout.Button("report")) {
-			string log = "";
-			AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
-			for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
-				AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
-				Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
-				
-				log += i + "\t";
-				if (null != transform) {
-					var rotation = transform.localRotation;
-					log += rotation.x + "\t" + rotation.y + "\t" + rotation.z + "\t" + rotation.w + "\t";
-//					var position = transform.localPosition;
-//					log += position.x + "\t" + position.y + "\t" + position.z + "\t";
-				}
-				log += bone_index.ToString() + "\t";
-				log += "\n";
-			}
-			Debug.Log(log);
-		}
-#endif
 
 		if (is_dirty && (null != animator_)) {
 			//更新が有ったなら
@@ -187,6 +118,80 @@ public class MuscleMarionette : EditorWindow {
 
 			is_update = true;
 		}
+		return is_update;
+	}
+	
+	/// <summary>
+	/// ポーズボタンの為のGUI描画
+	/// </summary>
+	/// <returns>更新が有ったか(true:更新有り, false:未更新)</returns>
+	private bool OnGUIforPoseButton() {
+		bool is_update = false;
+		
+		EditorGUILayout.BeginHorizontal();
+		{
+			if (GUILayout.Button("First", EditorStyles.miniButtonLeft)) {
+				muscles_value_ = muscles_first_value_.ToArray();
+				
+				is_update = true;
+			}
+			if (GUILayout.Button("Tstyle", EditorStyles.miniButtonMid)) {
+				AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
+				for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
+					AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
+					Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+					if (null != transform) {
+						Quaternion rotation = animator_analyzer.GetRotationTstylePose(bone_index);
+						transform.localRotation = rotation;
+					}
+				}
+				PoseToValue();
+
+				is_update = true;
+			}
+#if false
+			if (GUILayout.Button("Default", EditorStyles.miniButtonMid)) {
+				AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
+				for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
+					AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
+					Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+					if (null != transform) {
+						Quaternion rotation = animator_analyzer.GetRotationDefaultPose(bone_index);
+						transform.localRotation = rotation;
+					}
+				}
+				PoseToValue();
+				
+				is_update = true;
+			}
+#endif
+			if (GUILayout.Button("Reset", EditorStyles.miniButtonRight)) {
+				ResetValue();
+				
+				is_update = true;
+			}
+			if (GUILayout.Button("Report", EditorStyles.miniButton)) {
+				string log = "";
+				AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
+				for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
+					AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
+					Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+					
+					log += i + "\t";
+					if (null != transform) {
+						var rotation = transform.localRotation;
+						log += rotation.x + "\t" + rotation.y + "\t" + rotation.z + "\t" + rotation.w + "\t";
+					}
+					log += bone_index.ToString() + "\t";
+					log += "\n";
+				}
+				Debug.Log(log);
+				
+				is_update = true;
+			}
+		}
+		EditorGUILayout.EndHorizontal();
+		
 		return is_update;
 	}
 	
@@ -578,6 +583,7 @@ public class MuscleMarionette : EditorWindow {
 	private Animator animator_ = null;
 	private float[] group_value_ = null;
 	private float[] muscles_value_ = null;
+	private float[] muscles_first_value_ = null;
 	
 	private static	bool		group_tree_displays_;	//グループツリー表示
 	private static	bool[]		limb_tree_displays_;	//四肢ツリー表示
