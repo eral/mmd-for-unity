@@ -2,7 +2,6 @@
 using UnityEditor;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 
 public class MuscleMarionette : EditorWindow {
 	
@@ -21,8 +20,6 @@ public class MuscleMarionette : EditorWindow {
 	static MuscleMarionette() {
 		group_tree_displays_ = true;
 		limb_tree_displays_ = Enumerable.Repeat(false, System.Enum.GetValues(typeof(Limb)).Length).ToArray();
-		AvatarUtility_SetHumanPose_ = Types.GetType("UnityEditor.AvatarUtility", "UnityEditor.dll")
-											.GetMethod("SetHumanPose", BindingFlags.Public | BindingFlags.Static);
 	}
 	
 	/// <summary>
@@ -136,12 +133,12 @@ public class MuscleMarionette : EditorWindow {
 				is_update = true;
 			}
 			if (GUILayout.Button("Tstyle", EditorStyles.miniButtonMid)) {
-				AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
-				for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
-					AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
-					Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+				AnimatorUtility animator_utility = new AnimatorUtility(animator_);
+				for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorUtility.HumanBodyFullBones)).Length; i < i_max; ++i) {
+					AnimatorUtility.HumanBodyFullBones bone_index = (AnimatorUtility.HumanBodyFullBones)i;
+					Transform transform = animator_utility.GetTransformFromBoneIndex(bone_index);
 					if (null != transform) {
-						Quaternion rotation = animator_analyzer.GetRotationTstylePose(bone_index);
+						Quaternion rotation = animator_utility.GetRotationTstylePose(bone_index);
 						transform.localRotation = rotation;
 					}
 				}
@@ -151,12 +148,12 @@ public class MuscleMarionette : EditorWindow {
 			}
 #if false
 			if (GUILayout.Button("Default", EditorStyles.miniButtonMid)) {
-				AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
-				for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
-					AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
-					Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+				AnimatorUtility animator_utility = new AnimatorUtility(animator_);
+				for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorUtility.HumanBodyFullBones)).Length; i < i_max; ++i) {
+					AnimatorUtility.HumanBodyFullBones bone_index = (AnimatorUtility.HumanBodyFullBones)i;
+					Transform transform = animator_utility.GetTransformFromBoneIndex(bone_index);
 					if (null != transform) {
-						Quaternion rotation = animator_analyzer.GetRotationDefaultPose(bone_index);
+						Quaternion rotation = animator_utility.GetRotationDefaultPose(bone_index);
 						transform.localRotation = rotation;
 					}
 				}
@@ -172,10 +169,10 @@ public class MuscleMarionette : EditorWindow {
 			}
 			if (GUILayout.Button("Report", EditorStyles.miniButton)) {
 				string log = "";
-				AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
-				for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorAnalyzer.HumanBodyFullBones)).Length; i < i_max; ++i) {
-					AnimatorAnalyzer.HumanBodyFullBones bone_index = (AnimatorAnalyzer.HumanBodyFullBones)i;
-					Transform transform = animator_analyzer.GetTransformFromBoneIndex(bone_index);
+				AnimatorUtility animator_utility = new AnimatorUtility(animator_);
+				for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorUtility.HumanBodyFullBones)).Length; i < i_max; ++i) {
+					AnimatorUtility.HumanBodyFullBones bone_index = (AnimatorUtility.HumanBodyFullBones)i;
+					Transform transform = animator_utility.GetTransformFromBoneIndex(bone_index);
 					
 					log += i + "\t";
 					if (null != transform) {
@@ -355,7 +352,8 @@ public class MuscleMarionette : EditorWindow {
 	/// </summary>
 	private void ApplyMusclesValue() {
 		if ((null != animator_) && (null != animator_.avatar)) {
-			AvatarUtility_SetHumanPose_.Invoke(null, new object[]{animator_, muscles_value_});
+			AnimatorUtility animator_utility = new AnimatorUtility(animator_);
+			animator_utility.SetMuscleValue(muscles_value_);
 			SceneView.RepaintAll();
 		}
 	}
@@ -365,8 +363,8 @@ public class MuscleMarionette : EditorWindow {
 	/// </summary>
 	void PoseToValue() {
 		ResetValue();
-		AnimatorAnalyzer animator_analyzer = new AnimatorAnalyzer(animator_);
-		muscles_value_ = animator_analyzer.GetMuscleValue();
+		AnimatorUtility animator_utility = new AnimatorUtility(animator_);
+		muscles_value_ = animator_utility.GetMuscleValue();
 	}
 	
 #if UNITY_4_2 //4.2以前
@@ -587,7 +585,6 @@ public class MuscleMarionette : EditorWindow {
 	
 	private static	bool		group_tree_displays_;	//グループツリー表示
 	private static	bool[]		limb_tree_displays_;	//四肢ツリー表示
-	private static	MethodInfo	AvatarUtility_SetHumanPose_;	//UnityEditor.dll/UnityEditor.AvatarUtility/SetHumanPoseのリフレクションキャッシュ
 
 	private static readonly HumanBodyMuscles[][] c_muscles_list_in_group = new [] {
 		new []{	//Group.All
@@ -892,138 +889,5 @@ public class MuscleMarionette : EditorWindow {
 			HumanBodyMuscles.RightFootTwistInOut,
 			HumanBodyMuscles.RightToesUpDown,
 		},
-	};
-
-	private static readonly string[] c_muscles_anim_attribute = new [] {
-		"Spine Front-Back",
-		"Spine Left-Right",
-		"Spine Twist Left-Right",
-		"Chest Front-Back",
-		"Chest Left-Right",
-		"Chest Twist Left-Right",
-		"Neck Nod Down-Up",
-		"Neck Tilt Left-Right",
-		"Neck Turn Left-Right",
-		"Head Nod Down-Up",
-		"Head Tilt Left-Right",
-		"Head Turn Left-Right",
-		"Left Eye Down-Up",
-		"Left Eye In-Out",
-		"Right Eye Down-Up",
-		"Right Eye In-Out",
-		"Jaw Close",
-		"Jaw Left-Right",
-		"Left Upper Leg Front-Back",
-		"Left Upper Leg In-Out",
-		"Left Upper Leg Twist In-Out",
-		"Left Lower Leg Stretch",
-		"Left Lower Leg Twist In-Out",
-		"Left Foot Up-Down",
-		"Left Foot Twist In-Out",
-		"Left Toes Up-Down",
-		"Right Upper Leg Front-Back",
-		"Right Upper Leg In-Out",
-		"Right Upper Leg Twist In-Out",
-		"Right Lower Leg Stretch",
-		"Right Lower Leg Twist In-Out",
-		"Right Foot Up-Down",
-		"Right Foot Twist In-Out",
-		"Right Toes Up-Down",
-		"Left Shoulder Down-Up",
-		"Left Shoulder Front-Back",
-		"Left Arm Down-Up",
-		"Left Arm Front-Back",
-		"Left Arm Twist In-Out",
-		"Left Forearm Stretch",
-		"Left Forearm Twist In-Out",
-		"Left Hand Down-Up",
-		"Left Hand In-Out",
-		"Right Shoulder Down-Up",
-		"Right Shoulder Front-Back",
-		"Right Arm Down-Up",
-		"Right Arm Front-Back",
-		"Right Arm Twist In-Out",
-		"Right Forearm Stretch",
-		"Right Forearm Twist In-Out",
-		"Right Hand Down-Up",
-		"Right Hand In-Out",
-		"LeftHand.Thumb.1 Stretched",
-		"LeftHand.Thumb.Spread",
-		"LeftHand.Thumb.2 Stretched",
-		"LeftHand.Thumb.3 Stretched",
-		"LeftHand.Index.1 Stretched",
-		"LeftHand.Index.Spread",
-		"LeftHand.Index.2 Stretched",
-		"LeftHand.Index.3 Stretched",
-		"LeftHand.Middle.1 Stretched",
-		"LeftHand.Middle.Spread",
-		"LeftHand.Middle.2 Stretched",
-		"LeftHand.Middle.3 Stretched",
-		"LeftHand.Ring.1 Stretched",
-		"LeftHand.Ring.Spread",
-		"LeftHand.Ring.2 Stretched",
-		"LeftHand.Ring.3 Stretched",
-		"LeftHand.Little.1 Stretched",
-		"LeftHand.Little.Spread",
-		"LeftHand.Little.2 Stretched",
-		"LeftHand.Little.3 Stretched",
-		"RightHand.Thumb.1 Stretched",
-		"RightHand.Thumb.Spread",
-		"RightHand.Thumb.2 Stretched",
-		"RightHand.Thumb.3 Stretched",
-		"RightHand.Index.1 Stretched",
-		"RightHand.Index.Spread",
-		"RightHand.Index.2 Stretched",
-		"RightHand.Index.3 Stretched",
-		"RightHand.Middle.1 Stretched",
-		"RightHand.Middle.Spread",
-		"RightHand.Middle.2 Stretched",
-		"RightHand.Middle.3 Stretched",
-		"RightHand.Ring.1 Stretched",
-		"RightHand.Ring.Spread",
-		"RightHand.Ring.2 Stretched",
-		"RightHand.Ring.3 Stretched",
-		"RightHand.Little.1 Stretched",
-		"RightHand.Little.Spread",
-		"RightHand.Little.2 Stretched",
-		"RightHand.Little.3 Stretched",
-	};
-
-	private static readonly string[] c_muscles_anim_attribute_sub = new [] {
-		"RootT.x",
-		"RootT.y",
-		"RootT.z",
-		"RootQ.w",
-		"RootQ.x",
-		"RootQ.y",
-		"RootQ.z",
-		"LeftFootT.x",
-		"LeftFootT.y",
-		"LeftFootT.z",
-		"LeftFootQ.w",
-		"LeftFootQ.x",
-		"LeftFootQ.y",
-		"LeftFootQ.z",
-		"RightFootT.x",
-		"RightFootT.y",
-		"RightFootT.z",
-		"RightFootQ.w",
-		"RightFootQ.x",
-		"RightFootQ.y",
-		"RightFootQ.z",
-		"LeftHandT.x",
-		"LeftHandT.y",
-		"LeftHandT.z",
-		"LeftHandQ.w",
-		"LeftHandQ.x",
-		"LeftHandQ.y",
-		"LeftHandQ.z",
-		"RightHandT.x",
-		"RightHandT.y",
-		"RightHandT.z",
-		"RightHandQ.w",
-		"RightHandQ.x",
-		"RightHandQ.y",
-		"RightHandQ.z",
 	};
 }

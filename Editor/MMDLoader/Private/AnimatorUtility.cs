@@ -2,9 +2,10 @@
 using UnityEditor;
 using System.Collections.Generic;
 using System.Linq;
+using System.Reflection;
 
 // アバターの設定を行うスクリプト
-public class AnimatorAnalyzer
+public class AnimatorUtility
 {
 	/// <summary>
 	/// ボーンフルインデックス
@@ -183,12 +184,10 @@ public class AnimatorAnalyzer
 	}
 
 	/// <summary>
-	/// デフォルトコンストラクタ
+	/// コンストラクタ
 	/// </summary>
-	/// <remarks>
-	/// ユーザーに依るインスタンス作成を禁止する
-	/// </remarks>
-	public AnimatorAnalyzer(Animator animator) {
+	/// <param name="animator">アニメーター</param>
+	public AnimatorUtility(Animator animator) {
 		animator_ = animator;
 		skeleton_index_to_hash_ = CreateSkeletonIndexToHash(animator.avatar);
 		human_index_to_hash_ = CreateHumanIndexToHash(animator.avatar);
@@ -197,9 +196,25 @@ public class AnimatorAnalyzer
 	}
 	
 	/// <summary>
+	/// スタティックコンストラクタ
+	/// </summary>
+	static AnimatorUtility() {
+		AvatarUtility_SetHumanPose_ = Types.GetType("UnityEditor.AvatarUtility", "UnityEditor.dll")
+											.GetMethod("SetHumanPose", BindingFlags.Public | BindingFlags.Static);
+	}
+	
+	/// <summary>
+	/// Muscle値の設定
+	/// </summary>
+	/// <param name="muscles_value_">Muscle値配列</param>
+	public void SetMuscleValue(float[] muscles_value_) {
+		AvatarUtility_SetHumanPose_.Invoke(null, new object[]{animator_, muscles_value_});
+	}
+	
+	/// <summary>
 	/// Muscle値の取得
 	/// </summary>
-	/// <returns>(現在の姿勢の)Muscle値</returns>
+	/// <returns>(現在の姿勢の)Muscle値配列</returns>
 	public float[] GetMuscleValue() {
 		float[] result = null;
 		if (null != animator_.avatar) {
@@ -209,24 +224,28 @@ public class AnimatorAnalyzer
 			
 			//ボーン操作
 			for (HumanBodyFullBones bone_index = (HumanBodyFullBones)0, bone_index_max = (HumanBodyFullBones)System.Enum.GetValues(typeof(HumanBodyFullBones)).Length; bone_index < bone_index_max; ++bone_index) {
-				AxesInformation axes_information = GetAxesInformation(bone_index);
-				Quaternion rotation_avatar_quaternion = GetTransformFromBoneIndex(bone_index).localRotation;
-				Vector3 rotation_avatar = (Quaternion.Inverse(axes_information.pre_quaternion) * rotation_avatar_quaternion * axes_information.post_quaternion).eulerAngles;
-				//軸操作
-				for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
-					HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
-					if ((uint)muscle_index < (uint)result.Length) {
-						float value = rotation_avatar[axis_index];
-						value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 360.0f: value)); //範囲を-180.0f～180.0fに収める
-						value *= axes_information.sign[axis_index];
-						if (value < 0) {
-							//標準ポーズより小さいなら
-							value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg); 
-						} else {
-							//標準ポーズより大きいなら
-							value = value / (axes_information.limit.max[axis_index] * Mathf.Rad2Deg);
+				Transform bone_transform = GetTransformFromBoneIndex(bone_index);
+				if (null != bone_transform) {
+					//ボーンが有るなら
+					//Muscle値算出
+					AxesInformation axes_information = GetAxesInformation(bone_index);
+					Vector3 rotation_avatar = (Quaternion.Inverse(axes_information.pre_quaternion) * bone_transform.localRotation * axes_information.post_quaternion).eulerAngles;
+					//軸操作
+					for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
+						HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
+						if ((uint)muscle_index < (uint)result.Length) {
+							float value = rotation_avatar[axis_index];
+							value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 360.0f: value)); //範囲を-180.0f～180.0fに収める
+							value *= axes_information.sign[axis_index];
+							if (value < 0) {
+								//標準ポーズより小さいなら
+								value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg); 
+							} else {
+								//標準ポーズより大きいなら
+								value = value / (axes_information.limit.max[axis_index] * Mathf.Rad2Deg);
+							}
+							result[(int)muscle_index] = Mathf.Clamp(value, -1.0f, 1.0f);
 						}
-						result[(int)muscle_index] = Mathf.Clamp(value, -1.0f, 1.0f);
 					}
 				}
 			}
@@ -238,6 +257,7 @@ public class AnimatorAnalyzer
 	/// 基本ポーズのボーン回転値の取得
 	/// </summary>
 	/// <returns>Tポーズのボーン回転値</returns>
+	/// <param name="index">ボーンインデックス</param>
 	public Quaternion GetRotationDefaultPose(HumanBodyFullBones index) {
 		Quaternion result = Quaternion.identity;
 		if (HumanBodyFullBones.Hips == index) {
@@ -261,6 +281,7 @@ public class AnimatorAnalyzer
 	/// Tポーズのボーン回転値の取得
 	/// </summary>
 	/// <returns>Tポーズのボーン回転値</returns>
+	/// <param name="index">ボーンインデックス</param>
 	public Quaternion GetRotationTstylePose(HumanBodyFullBones index) {
 		if (null == human_transform_for_t_pose_) {
 			human_transform_for_t_pose_ = CreateHumanTransformForTstylePose();
@@ -279,6 +300,7 @@ public class AnimatorAnalyzer
 	/// ボーン回転制限値の取得
 	/// </summary>
 	/// <returns>ボーン回転制限値</returns>
+	/// <param name="index">ボーンインデックス</param>
 	public Vector3[] GetRotationLimit(HumanBodyFullBones index) {
 		AxesInformation.Limit axes_information_limit = GetAxesInformation(index).limit;
 		Vector3[] result = new[]{new Vector3(axes_information_limit.min.x, axes_information_limit.min.y, axes_information_limit.min.z)
@@ -690,4 +712,139 @@ public class AnimatorAnalyzer
 		public Vector3		scale;
 	}
 	PortableTransform[] human_transform_for_t_pose_ = null;
+	
+	private static	MethodInfo	AvatarUtility_SetHumanPose_;	//UnityEditor.dll/UnityEditor.AvatarUtility/SetHumanPoseのリフレクションキャッシュ
+	
+	private static readonly string[] c_muscles_anim_attribute = new [] {
+		"Spine Front-Back",
+		"Spine Left-Right",
+		"Spine Twist Left-Right",
+		"Chest Front-Back",
+		"Chest Left-Right",
+		"Chest Twist Left-Right",
+		"Neck Nod Down-Up",
+		"Neck Tilt Left-Right",
+		"Neck Turn Left-Right",
+		"Head Nod Down-Up",
+		"Head Tilt Left-Right",
+		"Head Turn Left-Right",
+		"Left Eye Down-Up",
+		"Left Eye In-Out",
+		"Right Eye Down-Up",
+		"Right Eye In-Out",
+		"Jaw Close",
+		"Jaw Left-Right",
+		"Left Upper Leg Front-Back",
+		"Left Upper Leg In-Out",
+		"Left Upper Leg Twist In-Out",
+		"Left Lower Leg Stretch",
+		"Left Lower Leg Twist In-Out",
+		"Left Foot Up-Down",
+		"Left Foot Twist In-Out",
+		"Left Toes Up-Down",
+		"Right Upper Leg Front-Back",
+		"Right Upper Leg In-Out",
+		"Right Upper Leg Twist In-Out",
+		"Right Lower Leg Stretch",
+		"Right Lower Leg Twist In-Out",
+		"Right Foot Up-Down",
+		"Right Foot Twist In-Out",
+		"Right Toes Up-Down",
+		"Left Shoulder Down-Up",
+		"Left Shoulder Front-Back",
+		"Left Arm Down-Up",
+		"Left Arm Front-Back",
+		"Left Arm Twist In-Out",
+		"Left Forearm Stretch",
+		"Left Forearm Twist In-Out",
+		"Left Hand Down-Up",
+		"Left Hand In-Out",
+		"Right Shoulder Down-Up",
+		"Right Shoulder Front-Back",
+		"Right Arm Down-Up",
+		"Right Arm Front-Back",
+		"Right Arm Twist In-Out",
+		"Right Forearm Stretch",
+		"Right Forearm Twist In-Out",
+		"Right Hand Down-Up",
+		"Right Hand In-Out",
+		"LeftHand.Thumb.1 Stretched",
+		"LeftHand.Thumb.Spread",
+		"LeftHand.Thumb.2 Stretched",
+		"LeftHand.Thumb.3 Stretched",
+		"LeftHand.Index.1 Stretched",
+		"LeftHand.Index.Spread",
+		"LeftHand.Index.2 Stretched",
+		"LeftHand.Index.3 Stretched",
+		"LeftHand.Middle.1 Stretched",
+		"LeftHand.Middle.Spread",
+		"LeftHand.Middle.2 Stretched",
+		"LeftHand.Middle.3 Stretched",
+		"LeftHand.Ring.1 Stretched",
+		"LeftHand.Ring.Spread",
+		"LeftHand.Ring.2 Stretched",
+		"LeftHand.Ring.3 Stretched",
+		"LeftHand.Little.1 Stretched",
+		"LeftHand.Little.Spread",
+		"LeftHand.Little.2 Stretched",
+		"LeftHand.Little.3 Stretched",
+		"RightHand.Thumb.1 Stretched",
+		"RightHand.Thumb.Spread",
+		"RightHand.Thumb.2 Stretched",
+		"RightHand.Thumb.3 Stretched",
+		"RightHand.Index.1 Stretched",
+		"RightHand.Index.Spread",
+		"RightHand.Index.2 Stretched",
+		"RightHand.Index.3 Stretched",
+		"RightHand.Middle.1 Stretched",
+		"RightHand.Middle.Spread",
+		"RightHand.Middle.2 Stretched",
+		"RightHand.Middle.3 Stretched",
+		"RightHand.Ring.1 Stretched",
+		"RightHand.Ring.Spread",
+		"RightHand.Ring.2 Stretched",
+		"RightHand.Ring.3 Stretched",
+		"RightHand.Little.1 Stretched",
+		"RightHand.Little.Spread",
+		"RightHand.Little.2 Stretched",
+		"RightHand.Little.3 Stretched",
+	};
+	
+	private static readonly string[] c_muscles_anim_attribute_sub = new [] {
+		"RootT.x",
+		"RootT.y",
+		"RootT.z",
+		"RootQ.w",
+		"RootQ.x",
+		"RootQ.y",
+		"RootQ.z",
+		"LeftFootT.x",
+		"LeftFootT.y",
+		"LeftFootT.z",
+		"LeftFootQ.w",
+		"LeftFootQ.x",
+		"LeftFootQ.y",
+		"LeftFootQ.z",
+		"RightFootT.x",
+		"RightFootT.y",
+		"RightFootT.z",
+		"RightFootQ.w",
+		"RightFootQ.x",
+		"RightFootQ.y",
+		"RightFootQ.z",
+		"LeftHandT.x",
+		"LeftHandT.y",
+		"LeftHandT.z",
+		"LeftHandQ.w",
+		"LeftHandQ.x",
+		"LeftHandQ.y",
+		"LeftHandQ.z",
+		"RightHandT.x",
+		"RightHandT.y",
+		"RightHandT.z",
+		"RightHandQ.w",
+		"RightHandQ.x",
+		"RightHandQ.y",
+		"RightHandQ.z",
+	};
 }
