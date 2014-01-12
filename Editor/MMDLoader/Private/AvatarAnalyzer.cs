@@ -203,32 +203,28 @@ public class AnimatorAnalyzer
 	public float[] GetMuscleValue() {
 		float[] result = null;
 		if (null != animator_.avatar) {
-			if (null == bone_axes_information_) {
-				bone_axes_information_ = CreateBoneAxesInformation();
-			}
-			
 			//先に戻り値用の配列を確保(後でボーン・軸順に格納していく)
 			result = Enumerable.Repeat(0.0f, System.Enum.GetValues(typeof(HumanBodyMuscles)).Length)
 								.ToArray();
 			
 			//ボーン操作
 			for (HumanBodyFullBones bone_index = (HumanBodyFullBones)0, bone_index_max = (HumanBodyFullBones)System.Enum.GetValues(typeof(HumanBodyFullBones)).Length; bone_index < bone_index_max; ++bone_index) {
-				Vector3 rotation_avatar = GetTransformFromBoneIndex(bone_index).localRotation.eulerAngles;
-				Vector3 rotation_default = GetRotationDefaultPose(bone_index).eulerAngles;
-				Vector3[] rotation_limit = GetRotationLimit(bone_index);
-				//AxesInformation axes_information = bone_axes_information_[(int)bone_index];
+				AxesInformation axes_information = GetAxesInformation(bone_index);
+				Quaternion rotation_avatar_quaternion = GetTransformFromBoneIndex(bone_index).localRotation;
+				Vector3 rotation_avatar = (Quaternion.Inverse(axes_information.pre_quaternion) * rotation_avatar_quaternion * axes_information.post_quaternion).eulerAngles;
 				//軸操作
 				for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
 					HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
 					if ((uint)muscle_index < (uint)result.Length) {
-						float value = rotation_avatar[axis_index] - rotation_default[axis_index];
-						value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 380.0f: value)); //範囲を-180.0f～180.0fに収める
+						float value = rotation_avatar[axis_index];
+						value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 360.0f: value)); //範囲を-180.0f～180.0fに収める
+						value *= axes_information.sign[axis_index];
 						if (value < 0) {
 							//標準ポーズより小さいなら
-							value = value / (rotation_limit[0][axis_index] * -180.0f); 
+							value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg); 
 						} else {
 							//標準ポーズより大きいなら
-							value = value / (rotation_limit[1][axis_index] * 180.0f);
+							value = value / (axes_information.limit.max[axis_index] * Mathf.Rad2Deg);
 						}
 						result[(int)muscle_index] = Mathf.Clamp(value, -1.0f, 1.0f);
 					}
@@ -255,14 +251,8 @@ public class AnimatorAnalyzer
 			}
 		} else {
 			//腰ボーン以外なら
-			if (null == bone_axes_information_) {
-				bone_axes_information_ = CreateBoneAxesInformation();
-			}
-			if ((uint)index < (uint)bone_axes_information_.Length) {
-				result = bone_axes_information_[(int)index].pre_quaternion * result * Quaternion.Inverse(bone_axes_information_[(int)index].post_quaternion);
-			} else {
-				throw new System.ArgumentOutOfRangeException();
-			}
+			AxesInformation axes_information = GetAxesInformation(index);
+			result = axes_information.pre_quaternion * result * Quaternion.Inverse(axes_information.post_quaternion);
 		}
 		return result;
 	}
@@ -290,16 +280,11 @@ public class AnimatorAnalyzer
 	/// </summary>
 	/// <returns>ボーン回転制限値</returns>
 	public Vector3[] GetRotationLimit(HumanBodyFullBones index) {
-		if (null == bone_axes_information_) {
-			bone_axes_information_ = CreateBoneAxesInformation();
-		}
-		Vector3[] result = null;
-		if ((uint)index < (uint)bone_axes_information_.Length) {
-			AxesInformation.Limit limit = bone_axes_information_[(int)index].limit;
-			result = new[]{new Vector3(limit.min.x, limit.min.y, limit.min.z), new Vector3(limit.max.x, limit.max.y, limit.max.z)};
-		} else {
-			throw new System.ArgumentOutOfRangeException();
-		}
+		AxesInformation.Limit axes_information_limit = GetAxesInformation(index).limit;
+		Vector3[] result = new[]{new Vector3(axes_information_limit.min.x, axes_information_limit.min.y, axes_information_limit.min.z)
+								, new Vector3(axes_information_limit.max.x, axes_information_limit.max.y, axes_information_limit.max.z)
+								};
+		result = result.Select(x=>x / Mathf.PI).ToArray(); //-1.0f～1.0fに正規化
 		return result;
 	}
 	
@@ -308,26 +293,20 @@ public class AnimatorAnalyzer
 	/// </summary>
 	/// <returns>Muscle範囲値</returns>
 	public Vector2 GetMuscleLimit(HumanBodyMuscles index) {
-		if (null == bone_axes_information_) {
-			bone_axes_information_ = CreateBoneAxesInformation();
-		}
-		Vector2? result = null;
+		Vector2 result = new Vector2();
 		HumanBodyFullBones bone_index = (HumanBodyFullBones)HumanTrait.BoneFromMuscle((int)index);
-		if ((uint)bone_index < (uint)bone_axes_information_.Length) {
-			for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
-				HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
-				if (index == muscle_index) {
-					result = new Vector2(bone_axes_information_[(int)bone_index].limit.min[axis_index]
-										, bone_axes_information_[(int)bone_index].limit.min[axis_index]
-										);
-					break;
-				}
+		for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
+			HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
+			if (index == muscle_index) {
+				AxesInformation.Limit axes_information_limit = GetAxesInformation(bone_index).limit;
+				result = new Vector2(axes_information_limit.min[axis_index]
+									, axes_information_limit.max[axis_index]
+									);
+				result = result / Mathf.PI; //-1.0f～1.0fに正規化
+				break;
 			}
 		}
-		if (!result.HasValue) {
-			throw new System.ArgumentOutOfRangeException();
-		}
-		return result.Value;
+		return result;
 	}
 	
 	/// <summary>
@@ -354,6 +333,24 @@ public class AnimatorAnalyzer
 		int human_index = GetHumanIndexFromBoneIndex(index);
 		var path = GetPathFromHumanIndex(human_index);
 		result = GetTransformFromPath(animator_, path);
+		return result;
+	}
+	
+	/// <summary>
+	/// ボーンインデックスから軸情報を取得
+	/// </summary>
+	/// <returns>ボーン軸情報</returns>
+	/// <param name="index">ボーンインデックス</param>
+	private AxesInformation GetAxesInformation(HumanBodyFullBones index) {
+		AxesInformation result = new AxesInformation();
+		if (null == bone_axes_information_) {
+			bone_axes_information_ = CreateBoneAxesInformation();
+		}
+		if ((uint)index < (uint)bone_axes_information_.Length) {
+			result = bone_axes_information_[(int)index];
+		} else {
+			throw new System.ArgumentOutOfRangeException();
+		}
 		return result;
 	}
 	
