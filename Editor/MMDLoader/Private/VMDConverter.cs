@@ -296,7 +296,7 @@ namespace MMD
 					const float tick_time = 1.0f / 30.0f;
 					float tick = mlist[i].flame_no * tick_time;
 					
-					Quaternion rotation=mlist[i].rotation;
+					Quaternion rotation=CorrectCoordinate(mlist[i].rotation);
 					QuaternionKeyframe r_cur_key=new QuaternionKeyframe(tick,rotation);
 					QuaternionKeyframe.AddBezierKeyframes(mlist[i].interpolation,3,r_prev_key,r_cur_key,interpolationQuality,ref r_keys,ref ir);
 					r_prev_key=r_cur_key;
@@ -376,9 +376,10 @@ namespace MMD
 					
 					float tick = mlist[i].flame_no * tick_time;
 					
-					FloatKeyframe lx_cur_key=new FloatKeyframe(tick,mlist[i].location.x * scale_ + default_position.x);
-					FloatKeyframe ly_cur_key=new FloatKeyframe(tick,mlist[i].location.y * scale_ + default_position.y);
-					FloatKeyframe lz_cur_key=new FloatKeyframe(tick,mlist[i].location.z * scale_ + default_position.z);
+					Vector3 location = CorrectCoordinate(mlist[i].location);
+					FloatKeyframe lx_cur_key=new FloatKeyframe(tick,location.x * scale_ + default_position.x);
+					FloatKeyframe ly_cur_key=new FloatKeyframe(tick,location.y * scale_ + default_position.y);
+					FloatKeyframe lz_cur_key=new FloatKeyframe(tick,location.z * scale_ + default_position.z);
 					
 					// 各軸別々に補間が付いてる
 					FloatKeyframe.AddBezierKeyframes(mlist[i].interpolation,0,lx_prev_key,lx_cur_key,interpolationQuality,ref lx_keys,ref ix);
@@ -537,6 +538,18 @@ namespace MMD
 			}
 		}
 
+		/// <summary>
+		/// 座標系補正
+		/// </summary>
+		/// <returns>MMD座標系</returns>
+		/// <param name='src'>Unity座標系</param>
+		private static Vector3 CorrectCoordinate(Vector3 src) {
+			return new Vector3(-src.x, src.y, -src.z);
+		}
+		private static Quaternion CorrectCoordinate(Quaternion src) {
+			return new Quaternion(-src.x, src.y, -src.z, src.w);
+		}
+		
 		/// <summary>
 		/// アニメーションタイプの設定
 		/// </summary>
