@@ -129,19 +129,11 @@ public class AvatarSettingScript
 	/// <returns>Z軸のみを回転させるQuaternion</returns>
 	static Quaternion ResetHorizontalPose(Transform transform, Transform child_transform)
 	{
-		// ボーンの向きを取得
+		// ボーンの回転量を取得
 		var bone_vector = child_transform.position - transform.position;
-		bone_vector.z = 0f;			// 平面化
-		bone_vector.Normalize();
-
-		// 平面化した正規化ベクトルと単位ベクトルを比較して，角度を取得する
-		Vector3 normalized_vector = bone_vector.x >= 0 ? Vector3.right : Vector3.left;
-		float cos_value = Vector3.Dot(bone_vector, normalized_vector);
-		float theta = Mathf.Acos(cos_value) * Mathf.Rad2Deg;
-
-		theta = bone_vector.x >= 0 ? -theta : theta;	// ボーンの向きによって回転方向が違う
-
-		return Quaternion.Euler(0f, 0f, theta);
+		bone_vector = bone_vector * Mathf.Sign(bone_vector.x); //atan2の結果を-90°～90°に制限
+		float theta = Mathf.Atan2(bone_vector.y, bone_vector.x) * Mathf.Rad2Deg;
+		return Quaternion.Euler(0f, 0f, -theta);
 	}
 
 	/// <summary>
@@ -174,22 +166,8 @@ public class AvatarSettingScript
 		case "右手首":	//Tポーズにする為に腕を持ち上げる
 			StartResettingHorizontal(transform, "右ひじ", "右腕", "右肩");
 			break;
-		case "腰": goto case "センター";
-		case "センター":
-			if (HasBone("腰") ^ ("センター" == transform.name)) {
-				//腰ボーンを持っていて、現在の入力が腰ボーンなら もしくは 腰ボーンを持っておらず、現在の入力がセンターボーンなら
-				//後ろを向いているので向き直す
-				transform.localRotation = Quaternion.Euler(0.0f, 180.0f, 0.0f);
-				transform.localPosition = new Vector3(-transform.localPosition.x, transform.localPosition.y, -transform.localPosition.z);
-			}
-			break;
 		default:
-			if (root_game_object_.transform.FindChild("Physics") == transform.parent) {
-				//物理演算ルートなら
-				//後ろを向いているので向き直す
-				transform.localRotation = Quaternion.Euler(0.0f, 180.0f, 0.0f);
-				transform.localPosition = new Vector3(-transform.localPosition.x, transform.localPosition.y, -transform.localPosition.z);
-			}
+			//empty.
 			break;
 		}
 	}

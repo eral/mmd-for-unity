@@ -365,8 +365,8 @@ namespace MMD
 		/// <param name='creation_info'>メッシュ作成情報</param>
 		void EntryAttributesForMesh(Mesh mesh, MeshCreationInfo creation_info)
 		{
-			mesh.vertices = creation_info.all_vertices.Select(x=>format_.vertex_list.vertex[x].pos * scale_).ToArray();
-			mesh.normals = creation_info.all_vertices.Select(x=>format_.vertex_list.vertex[x].normal_vec).ToArray();
+			mesh.vertices = creation_info.all_vertices.Select(x=>CorrectCoordinate(format_.vertex_list.vertex[x].pos) * scale_).ToArray();
+			mesh.normals = creation_info.all_vertices.Select(x=>CorrectCoordinate(format_.vertex_list.vertex[x].normal_vec)).ToArray();
 			mesh.uv = creation_info.all_vertices.Select(x=>format_.vertex_list.vertex[x].uv).ToArray();
 			if (0 < format_.header.additionalUV) {
 				//追加UVが1つ以上有れば
@@ -971,7 +971,7 @@ namespace MMD
 		{
 			return format_.bone_list.bone.Select(x=>{
 													GameObject game_object = new GameObject(x.bone_name);
-													game_object.transform.position = x.bone_position * scale_;
+													game_object.transform.position = CorrectCoordinate(x.bone_position) * scale_;
 													return game_object;
 												}).ToArray();
 		}
@@ -1121,7 +1121,7 @@ namespace MMD
 																		//親が居たらローカル座標化
 																		result.position -= format_.bone_list.bone[y.parent_bone_index].bone_position;
 																	}
-																	result.position *= scale_;
+																	result.position = CorrectCoordinate(result.position) * scale_;
 																	result.rotation = Quaternion.identity;
 																	return result;
 																})
@@ -1160,7 +1160,7 @@ namespace MMD
 			result.values = data.morph_offset.Select(x=>{
 														PMXFormat.BoneMorphOffset y = (PMXFormat.BoneMorphOffset)x;
 														BoneMorph.BoneMorphParameter param = new BoneMorph.BoneMorphParameter();
-														param.position = y.move_value * scale_;
+														param.position = CorrectCoordinate(y.move_value) * scale_;
 														param.rotation = y.rotate_value;
 														return param;
 													})
@@ -1183,7 +1183,7 @@ namespace MMD
 																		.ToList(); //ソートに向けて一旦リスト化
 			original_indices.Sort(); //ソート
 			int[] indices = original_indices.Select(x=>(int)x).ToArray();
-			Vector3[] source = indices.Select(x=>format_.vertex_list.vertex[x].pos * scale_) //インデックスを用いて、元データをパック
+			Vector3[] source = indices.Select(x=>CorrectCoordinate(format_.vertex_list.vertex[x].pos) * scale_) //インデックスを用いて、元データをパック
 									.ToArray();
 			
 			//インデックス逆引き用辞書の作成
@@ -1233,7 +1233,7 @@ namespace MMD
 			result.indices = data.morph_offset.Select(x=>((PMXFormat.VertexMorphOffset)x).vertex_index) //インデックスを取り出し
 												.Select(x=>(int)index_reverse_dictionary[x]) //逆変換を掛ける
 												.ToArray();
-			result.values = data.morph_offset.Select(x=>((PMXFormat.VertexMorphOffset)x).position_offset * scale_).ToArray();
+			result.values = data.morph_offset.Select(x=>CorrectCoordinate(((PMXFormat.VertexMorphOffset)x).position_offset) * scale_).ToArray();
 			return result;
 		}
 
@@ -1594,8 +1594,8 @@ namespace MMD
 			//result.AddComponent<Rigidbody>();	// 1つのゲームオブジェクトに複数の剛体が付く事が有るので本体にはrigidbodyを適用しない
 			
 			//位置・回転の設定
-			result.transform.position = rigidbody.collider_position * scale_;
-			result.transform.rotation = Quaternion.Euler(rigidbody.collider_rotation * Mathf.Rad2Deg);
+			result.transform.position = CorrectCoordinate(rigidbody.collider_position) * scale_;
+			result.transform.rotation = Quaternion.Euler(CorrectCoordinate(rigidbody.collider_rotation) * Mathf.Rad2Deg);
 			
 			// Colliderの設定
 			switch (rigidbody.shape_type) {
@@ -1929,17 +1929,17 @@ namespace MMD
 			// Position
 			if (joint.spring_position.x != 0.0f) {
 				drive = new JointDrive();
-				drive.positionSpring = joint.spring_position.x * scale_;
+				drive.positionSpring = CorrectCoordinate(joint.spring_position).x * scale_;
 				conf.xDrive = drive;
 			}
 			if (joint.spring_position.y != 0.0f) {
 				drive = new JointDrive();
-				drive.positionSpring = joint.spring_position.y * scale_;
+				drive.positionSpring = CorrectCoordinate(joint.spring_position).y * scale_;
 				conf.yDrive = drive;
 			}
 			if (joint.spring_position.z != 0.0f) {
 				drive = new JointDrive();
-				drive.positionSpring = joint.spring_position.z * scale_;
+				drive.positionSpring = CorrectCoordinate(joint.spring_position).z * scale_;
 				conf.zDrive = drive;
 			}
 
@@ -2011,6 +2011,15 @@ namespace MMD
 		int[] GetRigidbodyGroupTargets(GameObject[] rigids)
 		{
 			return format_.rigidbody_list.rigidbody.Select(x=>(int)x.ignore_collision_group).ToArray();
+		}
+		
+		/// <summary>
+		/// 座標系補正
+		/// </summary>
+		/// <returns>MMD座標系</returns>
+		/// <param name='src'>Unity座標系</param>
+		private static Vector3 CorrectCoordinate(Vector3 src) {
+			return new Vector3(-src.x, src.y, -src.z);
 		}
 		
 		/// <summary>
