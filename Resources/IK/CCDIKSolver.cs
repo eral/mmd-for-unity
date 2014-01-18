@@ -33,8 +33,8 @@ public class CCDIKSolver : MonoBehaviour
 	// 計算
 	public void Solve()
 	{
-        // 有効化されてなかった場合は実行しない
-        if (!this.enabled) return;
+		// 有効化されてなかった場合は実行しない
+		if (!this.enabled) return;
 
 		// ループ回数で計算していく
 		for (int tries = 0, _mt = iterations; tries < _mt; tries++)
@@ -120,8 +120,11 @@ public class CCDIKSolver : MonoBehaviour
 		}
 
 		// 逆に曲がらないように、制限してあげる
-		if (v.x < 90 && v.x > 2 && ((v.y == 0 && v.z == 0) || (v.y == 180 && v.z == 180)))
-			v.x = 360 - v.x * 0.99f;
+		if ((v.y == 0 && v.z == 0) || (v.y == 180 && v.z == 180)) {
+			if (270 < v.x && (v.x < 358)) {
+				v.x = -v.x * 0.99f;
+			}
+		}
 
 		bone.localRotation = Quaternion.Euler(v);
 	}
@@ -134,12 +137,4 @@ public class CCDIKSolver : MonoBehaviour
 		else
 			return 0;
 	}
-
-	// MMDEngine.cs の方でIKボーン全体も保持してるので、
-	// そっちからSolve()を呼び出している。
-	//--------------------
-	//void LateUpdate()
-	//{
-	//    Solve();
-	//}
 }
