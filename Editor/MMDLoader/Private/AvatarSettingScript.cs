@@ -174,22 +174,8 @@ public class AvatarSettingScript
 		case "右手首":	//Tポーズにする為に腕を持ち上げる
 			StartResettingHorizontal(transform, "右ひじ", "右腕", "右肩");
 			break;
-		case "腰": goto case "センター";
-		case "センター":
-			if (HasBone("腰") ^ ("センター" == transform.name)) {
-				//腰ボーンを持っていて、現在の入力が腰ボーンなら もしくは 腰ボーンを持っておらず、現在の入力がセンターボーンなら
-				//後ろを向いているので向き直す
-				transform.localRotation = Quaternion.Euler(0.0f, 180.0f, 0.0f);
-				transform.localPosition = new Vector3(-transform.localPosition.x, transform.localPosition.y, -transform.localPosition.z);
-			}
-			break;
 		default:
-			if (root_game_object_.transform.FindChild("Physics") == transform.parent) {
-				//物理演算ルートなら
-				//後ろを向いているので向き直す
-				transform.localRotation = Quaternion.Euler(0.0f, 180.0f, 0.0f);
-				transform.localPosition = new Vector3(-transform.localPosition.x, transform.localPosition.y, -transform.localPosition.z);
-			}
+			//empty.
 			break;
 		}
 	}
