@@ -436,6 +436,137 @@ public class AnimatorUtility
 	}
 	
 	/// <summary>
+	/// アニメーションクリップをアバターに対応させる
+	/// </summary>
+	/// <returns>アバター対応アニメーションクリップ</returns>
+	/// <param name="clip">アバター未対応アニメーションクリップ</param>
+	public AnimationClip AdaptAnimationClip(AnimationClip clip) {
+		AnimationClip result = null;
+		if (animator_.avatar.isHuman && !clip.isHumanMotion) {
+			//アバターが人型 かつ アニメーションクリップが人型未対応なら
+			//サンプリング時にトランスフォームが破壊されるのでダミーを作成してそちらで行う
+			GameObject dummy_game_object = CreateAnimationClipGameObject(animator_, clip, "clip");
+			//フレームレートに準じてサンプリング
+			Animation dummy_animation = dummy_game_object.GetComponent<Animation>();
+			float delta_time = 1.0f / clip.frameRate;
+			var muscle_value_animations = CreateMuscleValueAnimation(dummy_animation, "clip", delta_time);
+			//ダミー破棄
+			GameObject.DestroyImmediate(dummy_game_object);
+			//人型アバター対応アニメーションクリップの作成
+			result = CreateHumanMecanimAnimationClip(muscle_value_animations);
+			result.name = clip.name;
+		} else if (animator_.avatar.isValid && !clip.isAnimatorMotion) {
+			//アバターが有り かつ アニメーションクリップがアバター未対応なら
+			result = clip;
+			//AnimationTypeをアバター対応アニメーションクリップに設定
+			AnimationUtility.SetAnimationType(result, ModelImporterAnimationType.Generic);
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// アニメーションクリップを持ったゲームオブジェクトを複製する
+	/// </summary>
+	/// <returns>ゲームオブジェクト</returns>
+	/// <param name="animator">複製元のゲームオブジェクトに付加されているアニメーター</param>
+	/// <param name="clip">アニメーションクリップ</param>
+	/// <param name="clip">アニメーション名</param>
+	public static GameObject CreateAnimationClipGameObject(Animator animator, AnimationClip clip, string clip_name) {
+		GameObject result = (GameObject)GameObject.Instantiate(animator.gameObject);
+		Animation animation = result.GetComponent<Animation>();
+		if (null != animation) {
+			//既にAnimationコンポーネントを持っているなら
+			//不要なアニメーションクリップを削除
+			foreach (AnimationState state in animation) {
+				animation.RemoveClip(state.name);
+			}
+		} else {
+			//Animationコンポーネントを持っていないなら
+			//付与
+			animation = result.AddComponent<Animation>();
+		}
+		//アニメーションクリップの付与
+		animation.AddClip(clip, clip_name);
+		return result;
+	}
+
+	/// <summary>
+	/// アニメーションクリップからMuscle値アニメーションを作成する
+	/// </summary>
+	/// <returns>Muscle値アニメーションの配列</returns>
+	/// <param name="animation">サンプリングするアニメーション(トランスフォームを破壊します)</param>
+	/// <param name="clip_name">サンプリングするクリップ名</param>
+	/// <param name="delta_time">サンプリング周期</param>
+	public static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, float delta_time) {
+		AnimatorUtility animator_utility = new AnimatorUtility(animation.gameObject.GetComponent<Animator>());
+		//アニメーションクリップの有効化
+		animation[clip_name].weight = 1.0f;
+		animation[clip_name].enabled = true;
+		//フレームレートに準じてサンプリング
+		Dictionary<float, float>[] result = new Dictionary<float, float>[System.Enum.GetValues(typeof(HumanBodyMuscles)).Length];
+		for (int i = 0, i_max = result.Length; i < i_max; ++i) {
+			if (animator_utility.HasBoneIndex((HumanBodyMuscles)i)) {
+				result[i] = new Dictionary<float, float>();
+			}
+		}
+		for (float t = 0.0f, t_max = animation[clip_name].length; t < t_max; t += delta_time) {
+			animation[clip_name].time = t;
+			animation.Sample();
+			float[] muscle_value = animator_utility.GetMuscleValue();
+			for (int i = 0, i_max = muscle_value.Length; i < i_max; ++i) {
+				if (null != result[i]) {
+					result[i].Add(t, muscle_value[i]);
+				}
+			}
+		}
+		return result;
+	}
+
+	/// <summary>
+	/// 人型アバター対応アニメーションクリップを作成する
+	/// </summary>
+	/// <returns>人型アバター対応アニメーションクリップ</returns>
+	/// <param name="muscle_value_animation">Muscle値アニメーションの配列</param>
+	public static AnimationClip CreateHumanMecanimAnimationClip(Dictionary<float, float>[] muscle_value_animations) {
+		AnimationClip result = new AnimationClip();
+		for (int muscle_index = 0, muscle_index_max = muscle_value_animations.Length; muscle_index < muscle_index_max; ++muscle_index) {
+			if (null != muscle_value_animations[muscle_index]) {
+				var key_frames = muscle_value_animations[muscle_index].Select(x=>new Keyframe(x.Key, x.Value))
+																		.ToArray();
+				AnimationCurve curve = new AnimationCurve(key_frames);
+#if !UNITY_4_2 //4.3以降
+				AnimationUtility.SetEditorCurve(result
+												, EditorCurveBinding.FloatCurve(""
+																				, typeof(Animator)
+																				, c_muscles_anim_attribute[(int)muscle_index])
+												, curve
+												);
+#else
+				AnimationUtility.SetEditorCurve(result
+												, ""
+												, typeof(Animator)
+												, c_muscles_anim_attribute[(int)muscle_index])
+												, curve
+												);
+#endif
+			}
+		}
+		//AnimationType人型アバター対応アニメーションクリップに設定
+		AnimationUtility.SetAnimationType(result, ModelImporterAnimationType.Human);
+		return result;
+	}
+
+	/// <summary>
+	/// Muscleインデックス所持確認
+	/// </summary>
+	/// <returns>true:所持, false:未所持</returns>
+	/// <param name="index">ボーンインデックス</param>
+	private bool HasBoneIndex(HumanBodyMuscles index) {
+		HumanBodyFullBones bone_index = (HumanBodyFullBones)HumanTrait.BoneFromMuscle((int)index);
+		return HasBoneIndex(bone_index);
+	}
+	
+	/// <summary>
 	/// スケルトンインデックスからノードトランスフォームの取得
 	/// </summary>
 	/// <returns>ノードトランスフォーム</returns>
