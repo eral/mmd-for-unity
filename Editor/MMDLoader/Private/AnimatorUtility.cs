@@ -254,6 +254,49 @@ public class AnimatorUtility
 	}
 	
 	/// <summary>
+	/// Point値の取得
+	/// </summary>
+	/// <returns>(現在の姿勢の)Point値配列</returns>
+	private float[] GetPointValue() {
+		float[] result = null;
+		if (null != animator_.avatar) {
+			result = new float[System.Enum.GetValues(typeof(HumanBodyPoints)).Length];
+
+			//登録用関数の作成
+			System.Action<HumanBodyPoints, Vector3, Quaternion> SetResult = (index, position, rotation)=>{
+				for (int i = 0, i_max = 3; i < i_max; ++i) {
+					result[(int)index + i] = position[i];
+				}
+				for (int i = 0, i_max = 4; i < i_max; ++i) {
+					result[(int)index + i + 3] = rotation[i];
+				}
+			};
+
+			{ //Root
+				var transform = animator_.GetBoneTransform(HumanBodyBones.Hips);
+				SetResult(HumanBodyPoints.RootPositionX, transform.position, transform.rotation);
+			}
+			{ //LeftFoot
+				var transform = animator_.GetBoneTransform(HumanBodyBones.LeftFoot);
+				SetResult(HumanBodyPoints.LeftFootPositionX, transform.position, transform.rotation);
+			}
+			{ //RightFoot
+				var transform = animator_.GetBoneTransform(HumanBodyBones.RightFoot);
+				SetResult(HumanBodyPoints.RightFootPositionX, transform.position, transform.rotation);
+			}
+			{ //LeftHand
+				var transform = animator_.GetBoneTransform(HumanBodyBones.LeftHand);
+				SetResult(HumanBodyPoints.LeftHandPositionX, transform.position, transform.rotation);
+			}
+			{ //RightHand
+				var transform = animator_.GetBoneTransform(HumanBodyBones.RightHand);
+				SetResult(HumanBodyPoints.RightHandPositionX, transform.position, transform.rotation);
+			}
+		}
+		return result;
+	}
+	
+	/// <summary>
 	/// 基本ポーズのボーン回転値の取得
 	/// </summary>
 	/// <returns>Tポーズのボーン回転値</returns>
@@ -359,6 +402,17 @@ public class AnimatorUtility
 	}
 	
 	/// <summary>
+	/// ルートボーンのノードトランスフォームの取得
+	/// </summary>
+	/// <returns>ノードトランスフォーム</returns>
+	public Transform GetTransformFromRootBone() {
+		Transform result = null;
+		var path = GetPathFromHumanIndex(0);
+		result = GetTransformFromPath(animator_, path);
+		return result;
+	}
+	
+	/// <summary>
 	/// ボーンインデックスから軸情報を取得
 	/// </summary>
 	/// <returns>ボーン軸情報</returns>
@@ -450,10 +504,13 @@ public class AnimatorUtility
 			Animation dummy_animation = dummy_game_object.GetComponent<Animation>();
 			float delta_time = 1.0f / clip.frameRate;
 			var muscle_value_animations = CreateMuscleValueAnimation(dummy_animation, "clip", delta_time);
+			var point_value_animations = CreatePointValueAnimation(dummy_animation, "clip", delta_time);
 			//ダミー破棄
 			GameObject.DestroyImmediate(dummy_game_object);
 			//人型アバター対応アニメーションクリップの作成
-			result = CreateHumanMecanimAnimationClip(muscle_value_animations);
+			var value_animations = muscle_value_animations.Concat(point_value_animations)
+															.ToArray();
+			result = CreateHumanMecanimAnimationClip(value_animations);
 			result.name = clip.name;
 		} else if (animator_.avatar.isValid && !clip.isAnimatorMotion) {
 			//アバターが有り かつ アニメーションクリップがアバター未対応なら
@@ -523,29 +580,64 @@ public class AnimatorUtility
 	}
 
 	/// <summary>
+	/// アニメーションクリップからPoint値アニメーションを作成する
+	/// </summary>
+	/// <returns>Point値アニメーションの配列</returns>
+	/// <param name="animation">サンプリングするアニメーション(トランスフォームを破壊します)</param>
+	/// <param name="clip_name">サンプリングするクリップ名</param>
+	/// <param name="delta_time">サンプリング周期</param>
+	public static Dictionary<float, float>[] CreatePointValueAnimation(Animation animation, string clip_name, float delta_time) {
+		AnimatorUtility animator_utility = new AnimatorUtility(animation.gameObject.GetComponent<Animator>());
+		//アニメーションクリップの有効化
+		animation[clip_name].weight = 1.0f;
+		animation[clip_name].enabled = true;
+		//フレームレートに準じてサンプリング
+		Dictionary<float, float>[] result = new Dictionary<float, float>[System.Enum.GetValues(typeof(HumanBodyPoints)).Length];
+		for (int i = 0, i_max = result.Length; i < i_max; ++i) {
+			result[i] = new Dictionary<float, float>();
+		}
+		for (float t = 0.0f, t_max = animation[clip_name].length; t < t_max; t += delta_time) {
+			animation[clip_name].time = t;
+			animation.Sample();
+			float[] point_value = animator_utility.GetPointValue();
+			for (int i = 0, i_max = point_value.Length; i < i_max; ++i) {
+				result[i].Add(t, point_value[i]);
+			}
+		}
+		return result;
+	}
+	
+	/// <summary>
 	/// 人型アバター対応アニメーションクリップを作成する
 	/// </summary>
 	/// <returns>人型アバター対応アニメーションクリップ</returns>
 	/// <param name="muscle_value_animation">Muscle値アニメーションの配列</param>
-	public static AnimationClip CreateHumanMecanimAnimationClip(Dictionary<float, float>[] muscle_value_animations) {
+	public static AnimationClip CreateHumanMecanimAnimationClip(Dictionary<float, float>[] value_animations) {
+		int c_muscles_length = System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
 		AnimationClip result = new AnimationClip();
-		for (int muscle_index = 0, muscle_index_max = muscle_value_animations.Length; muscle_index < muscle_index_max; ++muscle_index) {
-			if (null != muscle_value_animations[muscle_index]) {
-				var key_frames = muscle_value_animations[muscle_index].Select(x=>new Keyframe(x.Key, x.Value))
+		for (int i = 0, i_max = value_animations.Length; i < i_max; ++i) {
+			if (null != value_animations[i]) {
+				var key_frames = value_animations[i].Select(x=>new Keyframe(x.Key, x.Value))
 																		.ToArray();
 				AnimationCurve curve = new AnimationCurve(key_frames);
+				string attribute;
+				if (i < c_muscles_length) {
+					attribute = c_muscles_anim_attribute[i];
+				} else {
+					attribute = c_points_anim_attribute[i - c_muscles_length];
+				}
 #if !UNITY_4_2 //4.3以降
 				AnimationUtility.SetEditorCurve(result
 												, EditorCurveBinding.FloatCurve(""
 																				, typeof(Animator)
-																				, c_muscles_anim_attribute[(int)muscle_index])
+																				, attribute)
 												, curve
 												);
 #else
 				AnimationUtility.SetEditorCurve(result
 												, ""
 												, typeof(Animator)
-												, c_muscles_anim_attribute[(int)muscle_index])
+												, attribute
 												, curve
 												);
 #endif
@@ -941,41 +1033,82 @@ public class AnimatorUtility
 		"RightHand.Little.3 Stretched",
 	};
 	
-	private static readonly string[] c_muscles_anim_attribute_sub = new [] {
+	/// <summary>
+	/// Pointsインデックス
+	/// </summary>
+	public enum HumanBodyPoints {
+		RootPositionX,
+		RootPositionY,
+		RootPositionZ,
+		RootRotationX,
+		RootRotationY,
+		RootRotationZ,
+		RootRotationW,
+		LeftFootPositionX,
+		LeftFootPositionY,
+		LeftFootPositionZ,
+		LeftFootRotationX,
+		LeftFootRotationY,
+		LeftFootRotationZ,
+		LeftFootRotationW,
+		RightFootPositionX,
+		RightFootPositionY,
+		RightFootPositionZ,
+		RightFootRotationX,
+		RightFootRotationY,
+		RightFootRotationZ,
+		RightFootRotationW,
+		LeftHandPositionX,
+		LeftHandPositionY,
+		LeftHandPositionZ,
+		LeftHandRotationX,
+		LeftHandRotationY,
+		LeftHandRotationZ,
+		LeftHandRotationW,
+		RightHandPositionX,
+		RightHandPositionY,
+		RightHandPositionZ,
+		RightHandRotationX,
+		RightHandRotationY,
+		RightHandRotationZ,
+		RightHandRotationW,
+	}
+	
+	private static readonly string[] c_points_anim_attribute = new [] {
 		"RootT.x",
 		"RootT.y",
 		"RootT.z",
-		"RootQ.w",
 		"RootQ.x",
 		"RootQ.y",
 		"RootQ.z",
+		"RootQ.w",
 		"LeftFootT.x",
 		"LeftFootT.y",
 		"LeftFootT.z",
-		"LeftFootQ.w",
 		"LeftFootQ.x",
 		"LeftFootQ.y",
 		"LeftFootQ.z",
+		"LeftFootQ.w",
 		"RightFootT.x",
 		"RightFootT.y",
 		"RightFootT.z",
-		"RightFootQ.w",
 		"RightFootQ.x",
 		"RightFootQ.y",
 		"RightFootQ.z",
+		"RightFootQ.w",
 		"LeftHandT.x",
 		"LeftHandT.y",
 		"LeftHandT.z",
-		"LeftHandQ.w",
 		"LeftHandQ.x",
 		"LeftHandQ.y",
 		"LeftHandQ.z",
+		"LeftHandQ.w",
 		"RightHandT.x",
 		"RightHandT.y",
 		"RightHandT.z",
-		"RightHandQ.w",
 		"RightHandQ.x",
 		"RightHandQ.y",
 		"RightHandQ.z",
+		"RightHandQ.w",
 	};
 }
