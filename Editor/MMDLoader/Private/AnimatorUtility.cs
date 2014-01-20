@@ -228,26 +228,43 @@ public class AnimatorUtility
 				if (null != bone_transform) {
 					//ボーンが有るなら
 					//Muscle値算出
-					AxesInformation axes_information = GetAxesInformation(bone_index);
-					Vector3 rotation_avatar = (Quaternion.Inverse(axes_information.pre_quaternion) * bone_transform.localRotation * axes_information.post_quaternion).eulerAngles;
-					//軸操作
-					for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
-						HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
-						if ((uint)muscle_index < (uint)result.Length) {
-							float value = rotation_avatar[axis_index];
-							value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 360.0f: value)); //範囲を-180.0f～180.0fに収める
-							value *= axes_information.sign[axis_index];
-							if (value < 0) {
-								//標準ポーズより小さいなら
-								value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg); 
-							} else {
-								//標準ポーズより大きいなら
-								value = value / (axes_information.limit.max[axis_index] * Mathf.Rad2Deg);
-							}
-							result[(int)muscle_index] = Mathf.Clamp(value, -1.0f, 1.0f);
-						}
+					var muscle_values = GetMuscleValue(bone_index, bone_transform.localRotation);
+					foreach (var muscle_value in muscle_values) {
+						result[(int)muscle_value.Key] = muscle_value.Value;
 					}
 				}
+			}
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// Muscle値の取得
+	/// </summary>
+	/// <returns>Muscleインデックスと値の辞書</returns>
+	/// <param name="index">ボーンインデックス</param>
+	/// <param name="rotation">回転値</param>
+	private Dictionary<HumanBodyMuscles, float> GetMuscleValue(HumanBodyFullBones index, Quaternion rotation) {
+		Dictionary<HumanBodyMuscles, float> result = new Dictionary<HumanBodyMuscles, float>();
+		//Muscle値算出
+		AxesInformation axes_information = GetAxesInformation(index);
+		Vector3 rotation_avatar = (Quaternion.Inverse(axes_information.pre_quaternion) * rotation * axes_information.post_quaternion).eulerAngles;
+		//軸操作
+		for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
+			HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)index, axis_index);
+			if ((uint)muscle_index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) {
+				float value = rotation_avatar[axis_index];
+				value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 360.0f: value)); //範囲を-180.0f～180.0fに収める
+				value *= axes_information.sign[axis_index];
+				if (value < 0) {
+					//標準ポーズより小さいなら
+					value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg); 
+				} else {
+					//標準ポーズより大きいなら
+					value = value / (axes_information.limit.max[axis_index] * Mathf.Rad2Deg);
+				}
+				value = Mathf.Clamp(value, -1.0f, 1.0f);
+				result.Add (muscle_index, value);
 			}
 		}
 		return result;
@@ -511,7 +528,7 @@ public class AnimatorUtility
 			}
 			//フレームレートに準じてサンプリング
 			Animation dummy_animation = dummy_game_object.GetComponent<Animation>();
-			float delta_time = 1.0f / clip.frameRate;
+			float delta_time = 1.0f; //1.0f / clip.frameRate;
 			start(dummy_animation);
 			var muscle_value_animations = CreateMuscleValueAnimation(dummy_animation, "clip", delta_time, update);
 			//ダミー破棄
