@@ -494,17 +494,27 @@ public class AnimatorUtility
 	/// </summary>
 	/// <returns>アバター対応アニメーションクリップ</returns>
 	/// <param name="clip">アバター未対応アニメーションクリップ</param>
-	public AnimationClip AdaptAnimationClip(AnimationClip clip) {
+	/// <param name="start">人型アバターサンプリング時の初回更新関数</param>
+	/// <param name="update">人型アバターサンプリング時の更新関数(内部でAnimation.Sample()を呼んで下さい)</param>
+	public AnimationClip AdaptAnimationClip(AnimationClip clip, System.Action<Animation> start = null, System.Action<Animation> update = null) {
 		AnimationClip result = null;
 		if (animator_.avatar.isHuman && !clip.isHumanMotion) {
 			//アバターが人型 かつ アニメーションクリップが人型未対応なら
 			//サンプリング時にトランスフォームが破壊されるのでダミーを作成してそちらで行う
 			GameObject dummy_game_object = CreateAnimationClipGameObject(animator_, clip, "clip");
+			//初回更新関数と更新関数の生成
+			if (null == start) {
+				start = x=>{};
+			}
+			if (null == update) {
+				update = x=>x.Sample();
+			}
 			//フレームレートに準じてサンプリング
 			Animation dummy_animation = dummy_game_object.GetComponent<Animation>();
 			float delta_time = 1.0f / clip.frameRate;
-			var muscle_value_animations = CreateMuscleValueAnimation(dummy_animation, "clip", delta_time);
-			var point_value_animations = CreatePointValueAnimation(dummy_animation, "clip", delta_time);
+			start(dummy_animation);
+			var muscle_value_animations = CreateMuscleValueAnimation(dummy_animation, "clip", delta_time, update);
+			var point_value_animations = CreatePointValueAnimation(dummy_animation, "clip", delta_time, update);
 			//ダミー破棄
 			GameObject.DestroyImmediate(dummy_game_object);
 			//人型アバター対応アニメーションクリップの作成
@@ -528,7 +538,7 @@ public class AnimatorUtility
 	/// <param name="animator">複製元のゲームオブジェクトに付加されているアニメーター</param>
 	/// <param name="clip">アニメーションクリップ</param>
 	/// <param name="clip">アニメーション名</param>
-	public static GameObject CreateAnimationClipGameObject(Animator animator, AnimationClip clip, string clip_name) {
+	private static GameObject CreateAnimationClipGameObject(Animator animator, AnimationClip clip, string clip_name) {
 		GameObject result = (GameObject)GameObject.Instantiate(animator.gameObject);
 		Animation animation = result.GetComponent<Animation>();
 		if (null != animation) {
@@ -554,7 +564,8 @@ public class AnimatorUtility
 	/// <param name="animation">サンプリングするアニメーション(トランスフォームを破壊します)</param>
 	/// <param name="clip_name">サンプリングするクリップ名</param>
 	/// <param name="delta_time">サンプリング周期</param>
-	public static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, float delta_time) {
+	/// <param name="sample_cb">サンプリングコールバック</param>
+	private static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, float delta_time, System.Action<Animation> sample_cb) {
 		AnimatorUtility animator_utility = new AnimatorUtility(animation.gameObject.GetComponent<Animator>());
 		//アニメーションクリップの有効化
 		animation[clip_name].weight = 1.0f;
@@ -568,7 +579,7 @@ public class AnimatorUtility
 		}
 		for (float t = 0.0f, t_max = animation[clip_name].length; t < t_max; t += delta_time) {
 			animation[clip_name].time = t;
-			animation.Sample();
+			sample_cb(animation);
 			float[] muscle_value = animator_utility.GetMuscleValue();
 			for (int i = 0, i_max = muscle_value.Length; i < i_max; ++i) {
 				if (null != result[i]) {
@@ -586,7 +597,8 @@ public class AnimatorUtility
 	/// <param name="animation">サンプリングするアニメーション(トランスフォームを破壊します)</param>
 	/// <param name="clip_name">サンプリングするクリップ名</param>
 	/// <param name="delta_time">サンプリング周期</param>
-	public static Dictionary<float, float>[] CreatePointValueAnimation(Animation animation, string clip_name, float delta_time) {
+	/// <param name="sample_cb">サンプリングコールバック</param>
+	private static Dictionary<float, float>[] CreatePointValueAnimation(Animation animation, string clip_name, float delta_time, System.Action<Animation> sample_cb) {
 		AnimatorUtility animator_utility = new AnimatorUtility(animation.gameObject.GetComponent<Animator>());
 		//アニメーションクリップの有効化
 		animation[clip_name].weight = 1.0f;
@@ -598,7 +610,7 @@ public class AnimatorUtility
 		}
 		for (float t = 0.0f, t_max = animation[clip_name].length; t < t_max; t += delta_time) {
 			animation[clip_name].time = t;
-			animation.Sample();
+			sample_cb(animation);
 			float[] point_value = animator_utility.GetPointValue();
 			for (int i = 0, i_max = point_value.Length; i < i_max; ++i) {
 				result[i].Add(t, point_value[i]);
@@ -612,7 +624,7 @@ public class AnimatorUtility
 	/// </summary>
 	/// <returns>人型アバター対応アニメーションクリップ</returns>
 	/// <param name="muscle_value_animation">Muscle値アニメーションの配列</param>
-	public static AnimationClip CreateHumanMecanimAnimationClip(Dictionary<float, float>[] value_animations) {
+	private static AnimationClip CreateHumanMecanimAnimationClip(Dictionary<float, float>[] value_animations) {
 		int c_muscles_length = System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
 		AnimationClip result = new AnimationClip();
 		for (int i = 0, i_max = value_animations.Length; i < i_max; ++i) {
