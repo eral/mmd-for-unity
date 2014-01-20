@@ -514,13 +514,10 @@ public class AnimatorUtility
 			float delta_time = 1.0f / clip.frameRate;
 			start(dummy_animation);
 			var muscle_value_animations = CreateMuscleValueAnimation(dummy_animation, "clip", delta_time, update);
-			var point_value_animations = CreatePointValueAnimation(dummy_animation, "clip", delta_time, update);
 			//ダミー破棄
 			GameObject.DestroyImmediate(dummy_game_object);
 			//人型アバター対応アニメーションクリップの作成
-			var value_animations = muscle_value_animations.Concat(point_value_animations)
-															.ToArray();
-			result = CreateHumanMecanimAnimationClip(value_animations);
+			result = CreateHumanMecanimAnimationClip(muscle_value_animations);
 			result.name = clip.name;
 		} else if (animator_.avatar.isValid && !clip.isAnimatorMotion) {
 			//アバターが有り かつ アニメーションクリップがアバター未対応なら
@@ -571,11 +568,16 @@ public class AnimatorUtility
 		animation[clip_name].weight = 1.0f;
 		animation[clip_name].enabled = true;
 		//フレームレートに準じてサンプリング
-		Dictionary<float, float>[] result = new Dictionary<float, float>[System.Enum.GetValues(typeof(HumanBodyMuscles)).Length];
-		for (int i = 0, i_max = result.Length; i < i_max; ++i) {
+		int muscles_length = System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
+		int points_length = System.Enum.GetValues(typeof(HumanBodyPoints)).Length;
+		Dictionary<float, float>[] result = new Dictionary<float, float>[muscles_length + points_length];
+		for (int i = 0, i_max = muscles_length; i < i_max; ++i) {
 			if (animator_utility.HasBoneIndex((HumanBodyMuscles)i)) {
 				result[i] = new Dictionary<float, float>();
 			}
+		}
+		for (int i = muscles_length, i_max = result.Length; i < i_max; ++i) {
+			result[i] = new Dictionary<float, float>();
 		}
 		for (float t = 0.0f, t_max = animation[clip_name].length; t < t_max; t += delta_time) {
 			animation[clip_name].time = t;
@@ -586,46 +588,21 @@ public class AnimatorUtility
 					result[i].Add(t, muscle_value[i]);
 				}
 			}
-		}
-		return result;
-	}
-
-	/// <summary>
-	/// アニメーションクリップからPoint値アニメーションを作成する
-	/// </summary>
-	/// <returns>Point値アニメーションの配列</returns>
-	/// <param name="animation">サンプリングするアニメーション(トランスフォームを破壊します)</param>
-	/// <param name="clip_name">サンプリングするクリップ名</param>
-	/// <param name="delta_time">サンプリング周期</param>
-	/// <param name="sample_cb">サンプリングコールバック</param>
-	private static Dictionary<float, float>[] CreatePointValueAnimation(Animation animation, string clip_name, float delta_time, System.Action<Animation> sample_cb) {
-		AnimatorUtility animator_utility = new AnimatorUtility(animation.gameObject.GetComponent<Animator>());
-		//アニメーションクリップの有効化
-		animation[clip_name].weight = 1.0f;
-		animation[clip_name].enabled = true;
-		//フレームレートに準じてサンプリング
-		Dictionary<float, float>[] result = new Dictionary<float, float>[System.Enum.GetValues(typeof(HumanBodyPoints)).Length];
-		for (int i = 0, i_max = result.Length; i < i_max; ++i) {
-			result[i] = new Dictionary<float, float>();
-		}
-		for (float t = 0.0f, t_max = animation[clip_name].length; t < t_max; t += delta_time) {
-			animation[clip_name].time = t;
-			sample_cb(animation);
 			float[] point_value = animator_utility.GetPointValue();
 			for (int i = 0, i_max = point_value.Length; i < i_max; ++i) {
-				result[i].Add(t, point_value[i]);
+				result[i + muscles_length].Add(t, point_value[i]);
 			}
 		}
 		return result;
 	}
-	
+
 	/// <summary>
 	/// 人型アバター対応アニメーションクリップを作成する
 	/// </summary>
 	/// <returns>人型アバター対応アニメーションクリップ</returns>
 	/// <param name="muscle_value_animation">Muscle値アニメーションの配列</param>
 	private static AnimationClip CreateHumanMecanimAnimationClip(Dictionary<float, float>[] value_animations) {
-		int c_muscles_length = System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
+		int muscles_length = System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
 		AnimationClip result = new AnimationClip();
 		for (int i = 0, i_max = value_animations.Length; i < i_max; ++i) {
 			if (null != value_animations[i]) {
@@ -633,10 +610,10 @@ public class AnimatorUtility
 																		.ToArray();
 				AnimationCurve curve = new AnimationCurve(key_frames);
 				string attribute;
-				if (i < c_muscles_length) {
+				if (i < muscles_length) {
 					attribute = c_muscles_anim_attribute[i];
 				} else {
-					attribute = c_points_anim_attribute[i - c_muscles_length];
+					attribute = c_points_anim_attribute[i - muscles_length];
 				}
 #if !UNITY_4_2 //4.3以降
 				AnimationUtility.SetEditorCurve(result
