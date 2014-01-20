@@ -228,26 +228,86 @@ public class AnimatorUtility
 				if (null != bone_transform) {
 					//ボーンが有るなら
 					//Muscle値算出
-					AxesInformation axes_information = GetAxesInformation(bone_index);
-					Vector3 rotation_avatar = (Quaternion.Inverse(axes_information.pre_quaternion) * bone_transform.localRotation * axes_information.post_quaternion).eulerAngles;
-					//軸操作
-					for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
-						HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
-						if ((uint)muscle_index < (uint)result.Length) {
-							float value = rotation_avatar[axis_index];
-							value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 360.0f: value)); //範囲を-180.0f～180.0fに収める
-							value *= axes_information.sign[axis_index];
-							if (value < 0) {
-								//標準ポーズより小さいなら
-								value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg); 
-							} else {
-								//標準ポーズより大きいなら
-								value = value / (axes_information.limit.max[axis_index] * Mathf.Rad2Deg);
-							}
-							result[(int)muscle_index] = Mathf.Clamp(value, -1.0f, 1.0f);
-						}
+					var muscle_values = GetMuscleValue(bone_index, bone_transform.localRotation);
+					foreach (var muscle_value in muscle_values) {
+						result[(int)muscle_value.Key] = muscle_value.Value;
 					}
 				}
+			}
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// Muscle値の取得
+	/// </summary>
+	/// <returns>Muscleインデックスと値の辞書</returns>
+	/// <param name="index">ボーンインデックス</param>
+	/// <param name="rotation">回転値</param>
+	private Dictionary<HumanBodyMuscles, float> GetMuscleValue(HumanBodyFullBones index, Quaternion rotation) {
+		Dictionary<HumanBodyMuscles, float> result = new Dictionary<HumanBodyMuscles, float>();
+		//Muscle値算出
+		AxesInformation axes_information = GetAxesInformation(index);
+		Vector3 rotation_avatar = (Quaternion.Inverse(axes_information.pre_quaternion) * rotation * axes_information.post_quaternion).eulerAngles;
+		//軸操作
+		for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
+			HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)index, axis_index);
+			if ((uint)muscle_index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) {
+				float value = rotation_avatar[axis_index];
+				value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 360.0f: value)); //範囲を-180.0f～180.0fに収める
+				value *= axes_information.sign[axis_index];
+				if (value < 0) {
+					//標準ポーズより小さいなら
+					value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg); 
+				} else {
+					//標準ポーズより大きいなら
+					value = value / (axes_information.limit.max[axis_index] * Mathf.Rad2Deg);
+				}
+				value = Mathf.Clamp(value, -1.0f, 1.0f);
+				result.Add (muscle_index, value);
+			}
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// Point値の取得
+	/// </summary>
+	/// <returns>(現在の姿勢の)Point値配列</returns>
+	private float[] GetPointValue() {
+		float[] result = null;
+		if (null != animator_.avatar) {
+			result = new float[System.Enum.GetValues(typeof(HumanBodyPoints)).Length];
+
+			//登録用関数の作成
+			System.Action<HumanBodyPoints, Vector3, Quaternion> SetResult = (index, position, rotation)=>{
+				for (int i = 0, i_max = 3; i < i_max; ++i) {
+					result[(int)index + i] = position[i];
+				}
+				for (int i = 0, i_max = 4; i < i_max; ++i) {
+					result[(int)index + i + 3] = rotation[i];
+				}
+			};
+
+			{ //Root
+				var transform = animator_.GetBoneTransform(HumanBodyBones.Hips);
+				SetResult(HumanBodyPoints.RootPositionX, transform.position, transform.rotation);
+			}
+			{ //LeftFoot
+				var transform = animator_.GetBoneTransform(HumanBodyBones.LeftFoot);
+				SetResult(HumanBodyPoints.LeftFootPositionX, transform.position, transform.rotation);
+			}
+			{ //RightFoot
+				var transform = animator_.GetBoneTransform(HumanBodyBones.RightFoot);
+				SetResult(HumanBodyPoints.RightFootPositionX, transform.position, transform.rotation);
+			}
+			{ //LeftHand
+				var transform = animator_.GetBoneTransform(HumanBodyBones.LeftHand);
+				SetResult(HumanBodyPoints.LeftHandPositionX, transform.position, transform.rotation);
+			}
+			{ //RightHand
+				var transform = animator_.GetBoneTransform(HumanBodyBones.RightHand);
+				SetResult(HumanBodyPoints.RightHandPositionX, transform.position, transform.rotation);
 			}
 		}
 		return result;
@@ -359,6 +419,17 @@ public class AnimatorUtility
 	}
 	
 	/// <summary>
+	/// ルートボーンのノードトランスフォームの取得
+	/// </summary>
+	/// <returns>ノードトランスフォーム</returns>
+	public Transform GetTransformFromRootBone() {
+		Transform result = null;
+		var path = GetPathFromHumanIndex(0);
+		result = GetTransformFromPath(animator_, path);
+		return result;
+	}
+	
+	/// <summary>
 	/// ボーンインデックスから軸情報を取得
 	/// </summary>
 	/// <returns>ボーン軸情報</returns>
@@ -440,16 +511,26 @@ public class AnimatorUtility
 	/// </summary>
 	/// <returns>アバター対応アニメーションクリップ</returns>
 	/// <param name="clip">アバター未対応アニメーションクリップ</param>
-	public AnimationClip AdaptAnimationClip(AnimationClip clip) {
+	/// <param name="start">人型アバターサンプリング時の初回更新関数</param>
+	/// <param name="update">人型アバターサンプリング時の更新関数(内部でAnimation.Sample()を呼んで下さい)</param>
+	public AnimationClip AdaptAnimationClip(AnimationClip clip, System.Action<Animation> start = null, System.Action<Animation> update = null) {
 		AnimationClip result = null;
 		if (animator_.avatar.isHuman && !clip.isHumanMotion) {
 			//アバターが人型 かつ アニメーションクリップが人型未対応なら
 			//サンプリング時にトランスフォームが破壊されるのでダミーを作成してそちらで行う
 			GameObject dummy_game_object = CreateAnimationClipGameObject(animator_, clip, "clip");
+			//初回更新関数と更新関数の生成
+			if (null == start) {
+				start = x=>{};
+			}
+			if (null == update) {
+				update = x=>x.Sample();
+			}
 			//フレームレートに準じてサンプリング
 			Animation dummy_animation = dummy_game_object.GetComponent<Animation>();
-			float delta_time = 1.0f / clip.frameRate;
-			var muscle_value_animations = CreateMuscleValueAnimation(dummy_animation, "clip", delta_time);
+			float delta_time = 1.0f; //1.0f / clip.frameRate;
+			start(dummy_animation);
+			var muscle_value_animations = CreateMuscleValueAnimation(dummy_animation, "clip", delta_time, update);
 			//ダミー破棄
 			GameObject.DestroyImmediate(dummy_game_object);
 			//人型アバター対応アニメーションクリップの作成
@@ -471,7 +552,7 @@ public class AnimatorUtility
 	/// <param name="animator">複製元のゲームオブジェクトに付加されているアニメーター</param>
 	/// <param name="clip">アニメーションクリップ</param>
 	/// <param name="clip">アニメーション名</param>
-	public static GameObject CreateAnimationClipGameObject(Animator animator, AnimationClip clip, string clip_name) {
+	private static GameObject CreateAnimationClipGameObject(Animator animator, AnimationClip clip, string clip_name) {
 		GameObject result = (GameObject)GameObject.Instantiate(animator.gameObject);
 		Animation animation = result.GetComponent<Animation>();
 		if (null != animation) {
@@ -497,26 +578,36 @@ public class AnimatorUtility
 	/// <param name="animation">サンプリングするアニメーション(トランスフォームを破壊します)</param>
 	/// <param name="clip_name">サンプリングするクリップ名</param>
 	/// <param name="delta_time">サンプリング周期</param>
-	public static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, float delta_time) {
+	/// <param name="sample_cb">サンプリングコールバック</param>
+	private static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, float delta_time, System.Action<Animation> sample_cb) {
 		AnimatorUtility animator_utility = new AnimatorUtility(animation.gameObject.GetComponent<Animator>());
 		//アニメーションクリップの有効化
 		animation[clip_name].weight = 1.0f;
 		animation[clip_name].enabled = true;
 		//フレームレートに準じてサンプリング
-		Dictionary<float, float>[] result = new Dictionary<float, float>[System.Enum.GetValues(typeof(HumanBodyMuscles)).Length];
-		for (int i = 0, i_max = result.Length; i < i_max; ++i) {
+		int muscles_length = System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
+		int points_length = System.Enum.GetValues(typeof(HumanBodyPoints)).Length;
+		Dictionary<float, float>[] result = new Dictionary<float, float>[muscles_length + points_length];
+		for (int i = 0, i_max = muscles_length; i < i_max; ++i) {
 			if (animator_utility.HasBoneIndex((HumanBodyMuscles)i)) {
 				result[i] = new Dictionary<float, float>();
 			}
 		}
+		for (int i = muscles_length, i_max = result.Length; i < i_max; ++i) {
+			result[i] = new Dictionary<float, float>();
+		}
 		for (float t = 0.0f, t_max = animation[clip_name].length; t < t_max; t += delta_time) {
 			animation[clip_name].time = t;
-			animation.Sample();
+			sample_cb(animation);
 			float[] muscle_value = animator_utility.GetMuscleValue();
 			for (int i = 0, i_max = muscle_value.Length; i < i_max; ++i) {
 				if (null != result[i]) {
 					result[i].Add(t, muscle_value[i]);
 				}
+			}
+			float[] point_value = animator_utility.GetPointValue();
+			for (int i = 0, i_max = point_value.Length; i < i_max; ++i) {
+				result[i + muscles_length].Add(t, point_value[i]);
 			}
 		}
 		return result;
@@ -527,25 +618,32 @@ public class AnimatorUtility
 	/// </summary>
 	/// <returns>人型アバター対応アニメーションクリップ</returns>
 	/// <param name="muscle_value_animation">Muscle値アニメーションの配列</param>
-	public static AnimationClip CreateHumanMecanimAnimationClip(Dictionary<float, float>[] muscle_value_animations) {
+	private static AnimationClip CreateHumanMecanimAnimationClip(Dictionary<float, float>[] value_animations) {
+		int muscles_length = System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
 		AnimationClip result = new AnimationClip();
-		for (int muscle_index = 0, muscle_index_max = muscle_value_animations.Length; muscle_index < muscle_index_max; ++muscle_index) {
-			if (null != muscle_value_animations[muscle_index]) {
-				var key_frames = muscle_value_animations[muscle_index].Select(x=>new Keyframe(x.Key, x.Value))
+		for (int i = 0, i_max = value_animations.Length; i < i_max; ++i) {
+			if (null != value_animations[i]) {
+				var key_frames = value_animations[i].Select(x=>new Keyframe(x.Key, x.Value))
 																		.ToArray();
 				AnimationCurve curve = new AnimationCurve(key_frames);
+				string attribute;
+				if (i < muscles_length) {
+					attribute = c_muscles_anim_attribute[i];
+				} else {
+					attribute = c_points_anim_attribute[i - muscles_length];
+				}
 #if !UNITY_4_2 //4.3以降
 				AnimationUtility.SetEditorCurve(result
 												, EditorCurveBinding.FloatCurve(""
 																				, typeof(Animator)
-																				, c_muscles_anim_attribute[(int)muscle_index])
+																				, attribute)
 												, curve
 												);
 #else
 				AnimationUtility.SetEditorCurve(result
 												, ""
 												, typeof(Animator)
-												, c_muscles_anim_attribute[(int)muscle_index])
+												, attribute
 												, curve
 												);
 #endif
@@ -941,41 +1039,82 @@ public class AnimatorUtility
 		"RightHand.Little.3 Stretched",
 	};
 	
-	private static readonly string[] c_muscles_anim_attribute_sub = new [] {
+	/// <summary>
+	/// Pointsインデックス
+	/// </summary>
+	public enum HumanBodyPoints {
+		RootPositionX,
+		RootPositionY,
+		RootPositionZ,
+		RootRotationX,
+		RootRotationY,
+		RootRotationZ,
+		RootRotationW,
+		LeftFootPositionX,
+		LeftFootPositionY,
+		LeftFootPositionZ,
+		LeftFootRotationX,
+		LeftFootRotationY,
+		LeftFootRotationZ,
+		LeftFootRotationW,
+		RightFootPositionX,
+		RightFootPositionY,
+		RightFootPositionZ,
+		RightFootRotationX,
+		RightFootRotationY,
+		RightFootRotationZ,
+		RightFootRotationW,
+		LeftHandPositionX,
+		LeftHandPositionY,
+		LeftHandPositionZ,
+		LeftHandRotationX,
+		LeftHandRotationY,
+		LeftHandRotationZ,
+		LeftHandRotationW,
+		RightHandPositionX,
+		RightHandPositionY,
+		RightHandPositionZ,
+		RightHandRotationX,
+		RightHandRotationY,
+		RightHandRotationZ,
+		RightHandRotationW,
+	}
+	
+	private static readonly string[] c_points_anim_attribute = new [] {
 		"RootT.x",
 		"RootT.y",
 		"RootT.z",
-		"RootQ.w",
 		"RootQ.x",
 		"RootQ.y",
 		"RootQ.z",
+		"RootQ.w",
 		"LeftFootT.x",
 		"LeftFootT.y",
 		"LeftFootT.z",
-		"LeftFootQ.w",
 		"LeftFootQ.x",
 		"LeftFootQ.y",
 		"LeftFootQ.z",
+		"LeftFootQ.w",
 		"RightFootT.x",
 		"RightFootT.y",
 		"RightFootT.z",
-		"RightFootQ.w",
 		"RightFootQ.x",
 		"RightFootQ.y",
 		"RightFootQ.z",
+		"RightFootQ.w",
 		"LeftHandT.x",
 		"LeftHandT.y",
 		"LeftHandT.z",
-		"LeftHandQ.w",
 		"LeftHandQ.x",
 		"LeftHandQ.y",
 		"LeftHandQ.z",
+		"LeftHandQ.w",
 		"RightHandT.x",
 		"RightHandT.y",
 		"RightHandT.z",
-		"RightHandQ.w",
 		"RightHandQ.x",
 		"RightHandQ.y",
 		"RightHandQ.z",
+		"RightHandQ.w",
 	};
 }
