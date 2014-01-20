@@ -561,8 +561,37 @@ namespace MMD
 			if (null == animator) {
 				AnimationUtility.SetAnimationType(clip, ModelImporterAnimationType.Legacy);
 			} else {
+				//初回更新関数
+				System.Action<Animation> Start = animation=>{
+					MMDEngine mmd_engine = animation.GetComponent<MMDEngine>();
+					if (null != mmd_engine) {
+						//IKオンオフ
+						foreach (CCDIKSolver ik_script in mmd_engine.ik_list) {
+							switch (ik_script.name) {
+							case "右足ＩＫ":	ik_script.enabled = true;	break;
+							case "左足ＩＫ":	ik_script.enabled = true;	break;
+							default:			ik_script.enabled = false;	break;
+							}
+						}
+						
+						//全てのボーンコントローラーのStart()を呼ぶ
+						foreach (var bone_controller in mmd_engine.bone_controllers) {
+							bone_controller.Start();
+						}
+						//付与親等を更新
+						mmd_engine.LateUpdate();
+					}
+				};
+				//更新関数
+				System.Action<Animation> Update = animation=>{
+					animation.Sample();
+					MMDEngine mmd_engine = animation.GetComponent<MMDEngine>();
+					if (null != mmd_engine) {
+						mmd_engine.LateUpdate();
+					}
+				};
 				AnimatorUtility animator_utility = new AnimatorUtility(animator);
-				clip = animator_utility.AdaptAnimationClip(clip);
+				clip = animator_utility.AdaptAnimationClip(clip, Start, Update);
 			}
 		}
 		
