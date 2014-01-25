@@ -599,30 +599,52 @@ public class AnimatorUtility
 		start_cb(animation);
 		//サンプリング
 		var curves = AnimationUtility.GetAllCurves(animation[clip_name].clip, true);
-		var transforms_keyframes = PigeonholeAnimationClipCurveData(curves);
-		foreach (var transform_keyframes in transforms_keyframes) {
-			string path = transform_keyframes.Key;
-			var bone_index_fuzzy = animator_utility.GetBoneIndexFromPath(path);
-			Transform transform = animator_utility.GetTransformFromPath(path);
-			if (bone_index_fuzzy.HasValue && (null != transform)) {
-				//ボーンインデックスとトランスフォームが特定出来たなら
-				HumanBodyFullBones bone_index = bone_index_fuzzy.Value;
-				//Muscle値作成
-				foreach (var transform_keyframe in transform_keyframes.Value) {
-					//ポーズ適応
-					animation[clip_name].time = transform_keyframe.Key;
-					update_cb(animation);
-					//軸操作
-					for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
-						HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
-						if ((uint)muscle_index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) {
-							var value = transform_keyframe.Value.rotation.eulerAngles[axis_index];
-							result[(int)muscle_index].Add(transform_keyframe.Key, value);
+		var keyframes_transforms = PigeonholeAnimationClipCurveData(curves);
+		//時刻走査
+		foreach (var keyframe_transforms in keyframes_transforms) {
+			float time = keyframe_transforms.Key;
+			//プログレスバー表示
+			var is_cancel = EditorUtility.DisplayCancelableProgressBar("Convert From LegacyAnimation To MusclesAnimation"
+																	, string.Format("{0:#00.00%}  {1:##0.00}／{2:##0.00}  ({3:#0})"
+																					, time / animation[clip_name].length
+																					, time
+																					, animation[clip_name].length
+																					, keyframe_transforms.Value.Count()
+																					)
+																	, time / animation[clip_name].length
+																	);
+			if (is_cancel) {
+				break;
+			}
+			//ポーズ適応
+			animation[clip_name].time = time;
+			update_cb(animation);
+			//ボーン走査
+			foreach (var keyframe_transform in keyframe_transforms.Value) {
+				//ボーン特定
+				string path = keyframe_transform.Key;
+				var bone_index_fuzzy = animator_utility.GetBoneIndexFromPath(path);
+				Transform transform = animator_utility.GetTransformFromPath(path);
+				if (bone_index_fuzzy.HasValue && (null != transform)) {
+					{ //不正クォータニオン確認
+						var r = transform.rotation;
+						if (float.IsNaN(r.x) || float.IsNaN(r.y) || float.IsNaN(r.z) || float.IsNaN(r.w) || float.IsInfinity(r.x) || float.IsInfinity(r.y) || float.IsInfinity(r.z) || float.IsInfinity(r.w)) {
+							Debug.Log(transform.name);
+							continue;
 						}
+					}
+					//ボーンインデックスとトランスフォームが特定出来たなら
+					HumanBodyFullBones bone_index = bone_index_fuzzy.Value;
+					//Muscle値作成
+					var values = animator_utility.GetMuscleValue(bone_index, transform.rotation);
+					foreach (var value in values) {
+						result[(int)value.Key].Add(time, value.Value);
 					}
 				}
 			}
 		}
+		//プログレスバー削除
+		EditorUtility.ClearProgressBar();
 		return result;
 	}
 
@@ -631,10 +653,11 @@ public class AnimatorUtility
 	/// </summary>
 	/// <returns>トランスフォーム単位のアニメーションカーブデータ</returns>
 	/// <param name="curves">複数のアニメーションカーブデータ</param>
-	private static Dictionary<string, Dictionary<float, PortableTransform>> PigeonholeAnimationClipCurveData(AnimationClipCurveData[] curves) {
+	private static Dictionary<float, Dictionary<string, PortableTransform>> PigeonholeAnimationClipCurveData(AnimationClipCurveData[] curves) {
 		var position = new Dictionary<string, Dictionary<float, Vector3>>();
 		var rotation = new Dictionary<string, Dictionary<float, Vector4>>(); //Quaternionを1要素ずつ設定すると正規化が行われてしまうので一旦Vector4に格納
 		var scale = new Dictionary<string, Dictionary<float, Vector3>>();
+		var time = new Dictionary<float, object>();
 		foreach (var curve in curves) {
 			string path = curve.path;
 			if (!position.ContainsKey(path)) {
@@ -643,58 +666,102 @@ public class AnimatorUtility
 				scale[path] = new Dictionary<float, Vector3>();
 			}
 			foreach (var key in curve.curve.keys) {
-				if (!position[path].ContainsKey(key.time)) {
-					position[path][key.time] = Vector3.zero;
-					var q = Quaternion.identity;
-					rotation[path][key.time] = new Vector4(q.x, q.y, q.z, q.w);
-					scale[path][key.time] = Vector3.one;
-				}
+				//指定時刻マーク
+				time[key.time] = null;
+				//指定時刻がまだ無ければ作成
 				switch (curve.propertyName) {
-				case "m_LocalPosition.x":
-					position[path][key.time] = new Vector3(key.value                 , position[path][key.time].y, position[path][key.time].z);
-					break;
-				case "m_LocalPosition.y":
-					position[path][key.time] = new Vector3(position[path][key.time].x, key.value                 , position[path][key.time].z);
-					break;
+				//位置
+				case "m_LocalPosition.x": goto case "m_LocalPosition.z";
+				case "m_LocalPosition.y": goto case "m_LocalPosition.z";
 				case "m_LocalPosition.z":
-					position[path][key.time] = new Vector3(position[path][key.time].x, position[path][key.time].y, key.value                 );
+					if (!position[path].ContainsKey(key.time)) {
+						position[path][key.time] = Vector3.zero;
+					}
+					switch (curve.propertyName.Substring(16)) {
+					case "x":
+						position[path][key.time] = new Vector3(key.value                 , position[path][key.time].y, position[path][key.time].z);
+						break;
+					case "y":
+						position[path][key.time] = new Vector3(position[path][key.time].x, key.value                 , position[path][key.time].z);
+						break;
+					case "z":
+						position[path][key.time] = new Vector3(position[path][key.time].x, position[path][key.time].y, key.value                 );
+						break;
+					}
 					break;
-				case "m_LocalRotation.x":
-					rotation[path][key.time] = new Vector4(key.value                 , rotation[path][key.time].y, rotation[path][key.time].z, rotation[path][key.time].w);
-					break;
-				case "m_LocalRotation.y":
-					rotation[path][key.time] = new Vector4(rotation[path][key.time].x, key.value                 , rotation[path][key.time].z, rotation[path][key.time].w);
-					break;
-				case "m_LocalRotation.z":
-					rotation[path][key.time] = new Vector4(rotation[path][key.time].x, rotation[path][key.time].y, key.value                 , rotation[path][key.time].w);
-					break;
+				//回転
+				case "m_LocalRotation.x": goto case "m_LocalRotation.w";
+				case "m_LocalRotation.y": goto case "m_LocalRotation.w";
+				case "m_LocalRotation.z": goto case "m_LocalRotation.w";
 				case "m_LocalRotation.w":
-					rotation[path][key.time] = new Vector4(rotation[path][key.time].x, rotation[path][key.time].y, rotation[path][key.time].z, key.value                 );
+					if (!rotation[path].ContainsKey(key.time)) {
+						var q = Quaternion.identity;
+						rotation[path][key.time] = new Vector4(q.x, q.y, q.z, q.w);
+					}
+					switch (curve.propertyName.Substring(16)) {
+					case "x":
+						rotation[path][key.time] = new Vector4(key.value                 , rotation[path][key.time].y, rotation[path][key.time].z, rotation[path][key.time].w);
+						break;
+					case "y":
+						rotation[path][key.time] = new Vector4(rotation[path][key.time].x, key.value                 , rotation[path][key.time].z, rotation[path][key.time].w);
+						break;
+					case "z":
+						rotation[path][key.time] = new Vector4(rotation[path][key.time].x, rotation[path][key.time].y, key.value                 , rotation[path][key.time].w);
+						break;
+					case "w":
+						rotation[path][key.time] = new Vector4(rotation[path][key.time].x, rotation[path][key.time].y, rotation[path][key.time].z, key.value                 );
+						break;
+					}
 					break;
-				case "m_LocalScale.x":
-					scale[path][key.time] = new Vector3(key.value              , scale[path][key.time].y, scale[path][key.time].z);
-					break;
-				case "m_LocalScale.y":
-					scale[path][key.time] = new Vector3(scale[path][key.time].x, key.value              , scale[path][key.time].z);
-					break;
+				//拡縮
+				case "m_LocalScale.x": goto case "m_LocalScale.z";
+				case "m_LocalScale.y": goto case "m_LocalScale.z";
 				case "m_LocalScale.z":
-					scale[path][key.time] = new Vector3(scale[path][key.time].x, scale[path][key.time].y, key.value              );
+					if (!scale[path].ContainsKey(key.time)) {
+						scale[path][key.time] = Vector3.one;
+					}
+					switch (curve.propertyName.Substring(13)) {
+					case "x":
+						scale[path][key.time] = new Vector3(key.value              , scale[path][key.time].y, scale[path][key.time].z);
+						break;
+					case "y":
+						scale[path][key.time] = new Vector3(scale[path][key.time].x, key.value              , scale[path][key.time].z);
+						break;
+					case "z":
+						scale[path][key.time] = new Vector3(scale[path][key.time].x, scale[path][key.time].y, key.value              );
+						break;
+					}
 					break;
 				default:
+					throw new System.ArgumentException();
 					break;
 				}
 			}
 		}
 		//PortableTransform化
-		Dictionary<string, Dictionary<float, PortableTransform>> result = new Dictionary<string, Dictionary<float, PortableTransform>>();
-		foreach (var path in position) {
-			result[path.Key] = new Dictionary<float, PortableTransform>();
-			foreach(var time in path.Value) {
-				var transform = new PortableTransform();
-				transform.position = position[path.Key][time.Key];
-				transform.rotation = new Quaternion(rotation[path.Key][time.Key].x, rotation[path.Key][time.Key].y, rotation[path.Key][time.Key].z, rotation[path.Key][time.Key].w);
-				transform.scale = scale[path.Key][time.Key];
-				result[path.Key].Add(time.Key, transform);
+		var result = new Dictionary<float, Dictionary<string, PortableTransform>>();
+		var times = time.Select(x=>x.Key).ToArray();
+		System.Array.Sort(times);
+		foreach (var t in times) {
+			result.Add(t, new Dictionary<string, PortableTransform>());
+			foreach (var n in position.Select(x=>x.Key)) {
+				var has_position = position[n].ContainsKey(t);
+				var has_rotation = rotation[n].ContainsKey(t);
+				var has_scale = scale[n].ContainsKey(t);
+				if (has_position || has_rotation || has_scale) {
+					//指定時刻にキーフレームを持つパスが有るなら
+					var transform = PortableTransform.identity;
+					if (has_position) {
+						transform.position = position[n][t];
+					}
+					if (has_rotation) {
+						transform.rotation = new Quaternion(rotation[n][t].x, rotation[n][t].y, rotation[n][t].z, rotation[n][t].w);
+					}
+					if (has_scale) {
+						transform.scale = scale[n][t];
+					}
+					result[t].Add(n, transform);
+				}
 			}
 		}
 		return result;
