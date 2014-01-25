@@ -314,6 +314,49 @@ public class AnimatorUtility
 	}
 	
 	/// <summary>
+	/// Point値の取得
+	/// </summary>
+	/// <returns>Pointsインデックスと値の辞書</returns>
+	/// <param name="index">ボーンインデックス</param>
+	/// <param name="position">位置</param>
+	/// <param name="rotation">回転値</param>
+	private Dictionary<HumanBodyPoints, float> GetPointValue(HumanBodyFullBones index, Vector3 position, Quaternion rotation) {
+		Dictionary<HumanBodyPoints, float> result = new Dictionary<HumanBodyPoints, float>();
+		
+		//登録用関数の作成
+		System.Action<HumanBodyPoints, Vector3, Quaternion> SetResult = (start_index, bone_position, bone_rotation)=>{
+			for (int i = 0, i_max = 3; i < i_max; ++i) {
+				result.Add((HumanBodyPoints)(start_index + i), bone_position[i]);
+			}
+			for (int i = 0, i_max = 4; i < i_max; ++i) {
+				result.Add((HumanBodyPoints)(start_index + i + 3), bone_rotation[i]);
+			}
+		};
+		
+		switch (index) {
+		case HumanBodyFullBones.Hips:
+			SetResult(HumanBodyPoints.RootPositionX, position, rotation);
+			break;
+		case HumanBodyFullBones.LeftFoot:
+			SetResult(HumanBodyPoints.LeftFootPositionX, position, rotation);
+			break;
+		case HumanBodyFullBones.RightFoot:
+			SetResult(HumanBodyPoints.RightFootPositionX, position, rotation);
+			break;
+		case HumanBodyFullBones.LeftHand:
+			SetResult(HumanBodyPoints.LeftHandPositionX, position, rotation);
+			break;
+		case HumanBodyFullBones.RightHand:
+			SetResult(HumanBodyPoints.RightHandPositionX, position, rotation);
+			break;
+		default:
+			//empty.
+			break;
+		}
+		return result;
+	}
+	
+	/// <summary>
 	/// 基本ポーズのボーン回転値の取得
 	/// </summary>
 	/// <returns>Tポーズのボーン回転値</returns>
@@ -635,10 +678,18 @@ public class AnimatorUtility
 					}
 					//ボーンインデックスとトランスフォームが特定出来たなら
 					HumanBodyFullBones bone_index = bone_index_fuzzy.Value;
-					//Muscle値作成
-					var values = animator_utility.GetMuscleValue(bone_index, transform.rotation);
-					foreach (var value in values) {
-						result[(int)value.Key].Add(time, value.Value);
+					{ //Muscle値作成
+						var values = animator_utility.GetMuscleValue(bone_index, transform.rotation);
+						foreach (var value in values) {
+							result[(int)value.Key].Add(time, value.Value);
+						}
+					}
+					{ //Points値作成
+						var values = animator_utility.GetPointValue(bone_index, transform.position, transform.rotation);
+						foreach (var value in values) {
+							int key_index = (int)value.Key + System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
+							result[key_index].Add(time, value.Value);
+						}
 					}
 				}
 			}
@@ -734,7 +785,6 @@ public class AnimatorUtility
 					break;
 				default:
 					throw new System.ArgumentException();
-					break;
 				}
 			}
 		}
