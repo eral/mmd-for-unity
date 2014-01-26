@@ -666,9 +666,13 @@ public class AnimatorUtility
 			foreach (var keyframe_transform in keyframe_transforms.Value) {
 				//ボーン特定
 				string path = keyframe_transform.Key;
+				if ("Model/全ての親/センター" == path) {
+					Debug.Log(path);
+				}
 				var bone_index_fuzzy = animator_utility.GetBoneIndexFromPath(path);
 				Transform transform = animator_utility.GetTransformFromPath(path);
 				if (bone_index_fuzzy.HasValue && (null != transform)) {
+#if false
 					{ //不正クォータニオン確認
 						var r = transform.rotation;
 						if (float.IsNaN(r.x) || float.IsNaN(r.y) || float.IsNaN(r.z) || float.IsNaN(r.w) || float.IsInfinity(r.x) || float.IsInfinity(r.y) || float.IsInfinity(r.z) || float.IsInfinity(r.w)) {
@@ -676,6 +680,7 @@ public class AnimatorUtility
 							continue;
 						}
 					}
+#endif
 					//ボーンインデックスとトランスフォームが特定出来たなら
 					HumanBodyFullBones bone_index = bone_index_fuzzy.Value;
 					{ //Muscle値作成
@@ -915,6 +920,7 @@ public class AnimatorUtility
 	/// <returns>ボーンインデックス</returns>
 	/// <param name="path">ノードパス</param>
 	private HumanBodyFullBones? GetBoneIndexFromPath(string path) {
+#if false
 		HumanBodyFullBones? result = null;
 		var bone_human = Enumerable.Range(0, bone_index_to_human_index_.Length)
 									.Select(x=>new {bone_index = x, human_index = bone_index_to_human_index_[x]});
@@ -927,6 +933,18 @@ public class AnimatorUtility
 			result = (HumanBodyFullBones)bone_index_linq.First();
 		}
 		return result;
+#else
+		HumanBodyFullBones? result = null;
+		for (int i = 0, i_max = System.Enum.GetValues(typeof(HumanBodyFullBones)).Length; i < i_max; ++i) {
+			int human_index = GetHumanIndexFromBoneIndex((HumanBodyFullBones)i);
+			var bone_path = GetPathFromHumanIndex(human_index);
+			if (path == bone_path) {
+				result = (HumanBodyFullBones)i;
+				break;
+			}
+		}
+		return result;
+#endif
 	}
 	
 	/// <summary>
