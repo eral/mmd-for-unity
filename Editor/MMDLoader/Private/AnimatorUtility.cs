@@ -684,13 +684,13 @@ public class AnimatorUtility
 							result[(int)value.Key].Add(time, value.Value);
 						}
 					}
-					{ //Points値作成
-						var values = animator_utility.GetPointValue(bone_index, transform.position, transform.rotation);
-						foreach (var value in values) {
-							int key_index = (int)value.Key + System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
-							result[key_index].Add(time, value.Value);
-						}
-					}
+				}
+			}
+			{ //Points値作成
+				var values = animator_utility.GetPointValue();
+				for (int i = 0, i_max = values.Length; i < i_max; ++i) {
+					int key_index = i + System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
+					result[key_index].Add(time, values[i]);
 				}
 			}
 		}
