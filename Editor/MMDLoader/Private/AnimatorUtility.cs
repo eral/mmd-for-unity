@@ -673,7 +673,18 @@ public class AnimatorUtility
 					//ボーンインデックスとトランスフォームが特定出来たなら
 					HumanBodyFullBones bone_index = bone_index_fuzzy.Value;
 					{ //Muscle値作成
-						var values = animator_utility.GetMuscleValue(bone_index, transform.localRotation);
+						Quaternion rotation = transform.rotation;
+						var parent_bone_index_fuzzy = GetParentBoneIndex(bone_index);
+						if (parent_bone_index_fuzzy.HasValue) {
+							//親が居るなら
+							//相対値の算出
+							HumanBodyFullBones parent_bone_index = parent_bone_index_fuzzy.Value;
+							Transform parent_transform = animator_utility.GetTransformFromBoneIndex(parent_bone_index);
+							if (null != parent_transform) {
+								rotation = Quaternion.Inverse(parent_transform.rotation) * rotation;
+							}
+						}
+						var values = animator_utility.GetMuscleValue(bone_index, rotation);
 						foreach (var value in values) {
 							result[(int)value.Key].Add(time, value.Value);
 						}
@@ -919,6 +930,22 @@ public class AnimatorUtility
 											.Join(bone_human, x=>x, y=>y.human_index, (x,y)=>y.bone_index);
 		if (0 < bone_index_linq.Count()) {
 			result = (HumanBodyFullBones)bone_index_linq.First();
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// 親ボーンインデックスの取得
+	/// </summary>
+	/// <returns>親ボーンインデックス</returns>
+	/// <param name="inex">ボーンインデックス</param>
+	private static HumanBodyFullBones? GetParentBoneIndex(HumanBodyFullBones index) {
+		HumanBodyFullBones? result = null;
+		if ((uint)index < (uint)c_parent_bone_index.Length) {
+			var parent_index = c_parent_bone_index[(int)index];
+			if ((uint)parent_index < (uint)System.Enum.GetValues(typeof(HumanBodyFullBones)).Length) {
+				result = parent_index;
+			}
 		}
 		return result;
 	}
@@ -1341,5 +1368,63 @@ public class AnimatorUtility
 		"RightHandQ.y",
 		"RightHandQ.z",
 		"RightHandQ.w",
+	};
+
+	private static readonly HumanBodyFullBones[] c_parent_bone_index = new [] {
+		(HumanBodyFullBones)(-1),			//Hips,
+		HumanBodyFullBones.Hips,			//LeftUpperLeg,
+		HumanBodyFullBones.Hips,			//RightUpperLeg,
+		HumanBodyFullBones.LeftUpperLeg,	//LeftLowerLeg,
+		HumanBodyFullBones.RightUpperLeg,	//RightLowerLeg,
+		HumanBodyFullBones.LeftLowerLeg,	//LeftFoot,
+		HumanBodyFullBones.RightLowerLeg,	//RightFoot,
+		HumanBodyFullBones.Hips,			//Spine,
+		HumanBodyFullBones.Spine,			//Chest,
+		HumanBodyFullBones.Chest,			//Neck,
+		HumanBodyFullBones.Neck,			//Head,
+		HumanBodyFullBones.Chest,			//LeftShoulder,
+		HumanBodyFullBones.Chest,			//RightShoulder,
+		HumanBodyFullBones.LeftShoulder,	//LeftUpperArm,
+		HumanBodyFullBones.RightShoulder,	//RightUpperArm,
+		HumanBodyFullBones.LeftUpperArm,	//LeftLowerArm,
+		HumanBodyFullBones.RightUpperArm,	//RightLowerArm,
+		HumanBodyFullBones.LeftLowerArm,	//LeftHand,
+		HumanBodyFullBones.RightLowerArm,	//RightHand,
+		HumanBodyFullBones.LeftFoot,		//LeftToes,
+		HumanBodyFullBones.RightFoot,		//RightToes,
+		HumanBodyFullBones.Head,			//LeftEye,
+		HumanBodyFullBones.Head,			//RightEye,
+		HumanBodyFullBones.Head,			//Jaw,
+		
+		HumanBodyFullBones.LeftHand,				//LeftThumbProximal,
+		HumanBodyFullBones.LeftThumbProximal,		//LeftThumbIntermediate,
+		HumanBodyFullBones.LeftThumbIntermediate,	//LeftThumbDistal,
+		HumanBodyFullBones.LeftHand,				//LeftIndexProximal,
+		HumanBodyFullBones.LeftIndexProximal,		//LeftIndexIntermediate,
+		HumanBodyFullBones.LeftIndexIntermediate,	//LeftIndexDistal,
+		HumanBodyFullBones.LeftHand,				//LeftMiddleProximal,
+		HumanBodyFullBones.LeftMiddleProximal,		//LeftMiddleIntermediate,
+		HumanBodyFullBones.LeftMiddleIntermediate,	//LeftMiddleDistal,
+		HumanBodyFullBones.LeftHand,				//LeftRingProximal,
+		HumanBodyFullBones.LeftRingProximal,		//LeftRingIntermediate,
+		HumanBodyFullBones.LeftRingIntermediate,	//LeftRingDistal,
+		HumanBodyFullBones.LeftHand,				//LeftLittleProximal,
+		HumanBodyFullBones.LeftLittleProximal,		//LeftLittleIntermediate,
+		HumanBodyFullBones.LeftLittleIntermediate,	//LeftLittleDistal,
+		HumanBodyFullBones.RightHand,				//RightThumbProximal,
+		HumanBodyFullBones.RightThumbProximal,		//RightThumbIntermediate,
+		HumanBodyFullBones.RightThumbIntermediate,	//RightThumbDistal,
+		HumanBodyFullBones.RightHand,				//RightIndexProximal,
+		HumanBodyFullBones.RightIndexProximal,		//RightIndexIntermediate,
+		HumanBodyFullBones.RightIndexIntermediate,	//RightIndexDistal,
+		HumanBodyFullBones.RightHand,				//RightMiddleProximal,
+		HumanBodyFullBones.RightMiddleProximal,		//RightMiddleIntermediate,
+		HumanBodyFullBones.RightMiddleIntermediate,	//RightMiddleDistal,
+		HumanBodyFullBones.RightHand,				//RightRingProximal,
+		HumanBodyFullBones.RightRingProximal,		//RightRingIntermediate,
+		HumanBodyFullBones.RightRingIntermediate,	//RightRingDistal,
+		HumanBodyFullBones.RightHand,				//RightLittleProximal,
+		HumanBodyFullBones.RightLittleProximal,		//RightLittleIntermediate,
+		HumanBodyFullBones.RightLittleIntermediate,	//RightLittleDistal,
 	};
 }
