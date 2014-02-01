@@ -670,13 +670,6 @@ public class AnimatorUtility
 				var bone_index_fuzzy = animator_utility.GetBoneIndexFromPath(path);
 				Transform transform = animator_utility.GetTransformFromPath(path);
 				if (bone_index_fuzzy.HasValue && (null != transform)) {
-					{ //不正クォータニオン確認
-						var r = transform.rotation;
-						if (float.IsNaN(r.x) || float.IsNaN(r.y) || float.IsNaN(r.z) || float.IsNaN(r.w) || float.IsInfinity(r.x) || float.IsInfinity(r.y) || float.IsInfinity(r.z) || float.IsInfinity(r.w)) {
-							Debug.Log(transform.name);
-							continue;
-						}
-					}
 					//ボーンインデックスとトランスフォームが特定出来たなら
 					HumanBodyFullBones bone_index = bone_index_fuzzy.Value;
 					{ //Muscle値作成
