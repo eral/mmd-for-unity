@@ -644,8 +644,9 @@ public class AnimatorUtility
 		var curves = AnimationUtility.GetAllCurves(animation[clip_name].clip, true);
 		var keyframes_transforms = PigeonholeAnimationClipCurveData(curves);
 		//時刻走査
+		float frame_rate = animation[clip_name].clip.frameRate;
 		foreach (var keyframe_transforms in keyframes_transforms) {
-			float time = keyframe_transforms.Key;
+			float time = (keyframe_transforms.Key * frame_rate + 0.5f) / frame_rate; //フレーム単位に整形
 			//プログレスバー表示
 			var is_cancel = EditorUtility.DisplayCancelableProgressBar("Convert From LegacyAnimation To MusclesAnimation"
 																	, string.Format("{0:#00.00%}  {1:##0.00}／{2:##0.00}  ({3:#0})"
