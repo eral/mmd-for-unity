@@ -664,15 +664,35 @@ public class AnimatorUtility
 			animation[clip_name].time = time;
 			update_cb(animation);
 			//ボーン走査
-			float[] muscle_value = animator_utility.GetMuscleValue();
-			for (int i = 0, i_max = muscle_value.Length; i < i_max; ++i) {
-				if (null != result[i]) {
-					result[i].Add(time, muscle_value[i]);
+			foreach (var keyframe_transform in keyframe_transforms.Value) {
+				//ボーン特定
+				string path = keyframe_transform.Key;
+				var bone_index_fuzzy = animator_utility.GetBoneIndexFromPath(path);
+				Transform transform = animator_utility.GetTransformFromPath(path);
+				if (bone_index_fuzzy.HasValue && (null != transform)) {
+					{ //不正クォータニオン確認
+						var r = transform.rotation;
+						if (float.IsNaN(r.x) || float.IsNaN(r.y) || float.IsNaN(r.z) || float.IsNaN(r.w) || float.IsInfinity(r.x) || float.IsInfinity(r.y) || float.IsInfinity(r.z) || float.IsInfinity(r.w)) {
+							Debug.Log(transform.name);
+							continue;
+						}
+					}
+					//ボーンインデックスとトランスフォームが特定出来たなら
+					HumanBodyFullBones bone_index = bone_index_fuzzy.Value;
+					{ //Muscle値作成
+						var values = animator_utility.GetMuscleValue(bone_index, transform.rotation);
+						foreach (var value in values) {
+							result[(int)value.Key].Add(time, value.Value);
+						}
+					}
 				}
 			}
-			float[] point_value = animator_utility.GetPointValue();
-			for (int i = 0, i_max = point_value.Length; i < i_max; ++i) {
-				result[i + muscles_length].Add(time, point_value[i]);
+			{ //Points値作成
+				var values = animator_utility.GetPointValue();
+				for (int i = 0, i_max = values.Length; i < i_max; ++i) {
+					int key_index = i + System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
+					result[key_index].Add(time, values[i]);
+				}
 			}
 		}
 		//プログレスバー削除
