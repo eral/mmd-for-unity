@@ -580,7 +580,7 @@ public class AnimatorUtility
 	/// <param name="clip">アバター未対応アニメーションクリップ</param>
 	/// <param name="start">人型アバターサンプリング時の初回更新関数</param>
 	/// <param name="update">人型アバターサンプリング時の更新関数(内部でAnimation.Sample()を呼んで下さい)</param>
-	public AnimationClip AdaptAnimationClip(AnimationClip clip, System.Action<Animation> start = null, System.Func<Animation, HumanBodyFullBones[]> update = null) {
+	public AnimationClip AdaptAnimationClip(AnimationClip clip, System.Action<Animation> start = null, System.Func<Animation, IEnumerable<string>, HumanBodyFullBones[]> update = null) {
 		AnimationClip result = null;
 		if (animator_.avatar.isHuman && !clip.isHumanMotion) {
 			//アバターが人型 かつ アニメーションクリップが人型未対応なら
@@ -589,7 +589,7 @@ public class AnimatorUtility
 				start = x=>{};
 			}
 			if (null == update) {
-				update = x=>{x.Sample();return new HumanBodyFullBones[0];};
+				update = (anim,path)=>{anim.Sample();return new HumanBodyFullBones[0];};
 			}
 			//サンプリング時にトランスフォームが破壊されるのでダミーを作成してそちらで行う
 			GameObject dummy_game_object = CreateAnimationClipGameObject(animator_, clip, "clip");
@@ -645,7 +645,7 @@ public class AnimatorUtility
 	/// <param name="delta_time">サンプリング周期</param>
 	/// <param name="start_cb">初回サンプリング前コールバック</param>
 	/// <param name="update_cb">サンプリングコールバック</param>
-	private static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, System.Action<Animation> start_cb, System.Func<Animation, HumanBodyFullBones[]> update_cb) {
+	private static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, System.Action<Animation> start_cb, System.Func<Animation, IEnumerable<string>, HumanBodyFullBones[]> update_cb) {
 		AnimatorUtility animator_utility = new AnimatorUtility(animation.gameObject.GetComponent<Animator>());
 		//戻り値バッファ作成
 		int muscles_length = System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
@@ -686,13 +686,14 @@ public class AnimatorUtility
 			}
 			//ポーズ適応
 			animation[clip_name].time = time;
-			var add_key = update_cb(animation);
+			var target_paths = keyframe_transforms.Value.Select(x=>x.Key);
+			var add_bones = update_cb(animation, target_paths);
 			//ボーン走査
 			var bone_indexes = keyframe_transforms.Value.Select(x=>x.Key) //パスの取り出し
 														.Select(x=>animator_utility.GetBoneIndexFromPath(x)) //ボーンインデックス変換
 														.Where(x=>x.HasValue) //ボーンインデックス変換に失敗した対象の除去
 														.Select(x=>x.Value) //Nullableオブジェクトからボーンインデックス取り出し
-														.Concat(add_key) //追加要望ボーンインデックスの連結
+														.Concat(add_bones) //追加要望ボーンインデックスの連結
 														.Distinct(); //重複削除
 			foreach (var bone_index in bone_indexes) {
 				Transform transform = animator_utility.GetTransformFromBoneIndex(bone_index);
