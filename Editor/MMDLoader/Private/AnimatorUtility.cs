@@ -271,6 +271,29 @@ public class AnimatorUtility
 	}
 	
 	/// <summary>
+	/// Muscleに整形した回転値の取得
+	/// </summary>
+	/// <returns>Muscleに整形した回転値</returns>
+	/// <param name="index">ボーンインデックス</param>
+	/// <param name="rotation">回転値</param>
+	private Quaternion GetMuscleNormalize(HumanBodyFullBones index, Quaternion rotation) {
+		//Muscle値算出
+		AxesInformation axes_information = GetAxesInformation(index);
+		Vector3 rotation_avatar = (Quaternion.Inverse(axes_information.pre_quaternion) * rotation * axes_information.post_quaternion).eulerAngles;
+		//軸操作
+		for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
+			HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)index, axis_index);
+			if ((uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length <= (uint)muscle_index) {
+				//Muscle未対象なら
+				//無回転化
+				rotation_avatar[axis_index] = 0.0f;
+			}
+		}
+		Quaternion result = axes_information.pre_quaternion * Quaternion.Euler(rotation_avatar) * Quaternion.Inverse(axes_information.post_quaternion);
+		return result;
+	}
+	
+	/// <summary>
 	/// Point値の取得
 	/// </summary>
 	/// <returns>(現在の姿勢の)Point値配列</returns>
@@ -290,8 +313,9 @@ public class AnimatorUtility
 			};
 
 			{ //Root
-				var transform = animator_.GetBoneTransform(HumanBodyBones.Hips);
-				SetResult(HumanBodyPoints.RootPositionX, transform.position, transform.rotation);
+				var hips_transform = animator_.GetBoneTransform(HumanBodyBones.Hips);
+				var chest_transform = animator_.GetBoneTransform(HumanBodyBones.Chest);
+				SetResult(HumanBodyPoints.RootPositionX, hips_transform.position, chest_transform.rotation);
 			}
 			{ //LeftFoot
 				var transform = animator_.GetBoneTransform(HumanBodyBones.LeftFoot);
@@ -556,7 +580,7 @@ public class AnimatorUtility
 	/// <param name="clip">アバター未対応アニメーションクリップ</param>
 	/// <param name="start">人型アバターサンプリング時の初回更新関数</param>
 	/// <param name="update">人型アバターサンプリング時の更新関数(内部でAnimation.Sample()を呼んで下さい)</param>
-	public AnimationClip AdaptAnimationClip(AnimationClip clip, System.Action<Animation> start = null, System.Action<Animation> update = null) {
+	public AnimationClip AdaptAnimationClip(AnimationClip clip, System.Action<Animation> start = null, System.Func<Animation, IEnumerable<string>, HumanBodyFullBones[]> update = null) {
 		AnimationClip result = null;
 		if (animator_.avatar.isHuman && !clip.isHumanMotion) {
 			//アバターが人型 かつ アニメーションクリップが人型未対応なら
@@ -565,7 +589,7 @@ public class AnimatorUtility
 				start = x=>{};
 			}
 			if (null == update) {
-				update = x=>x.Sample();
+				update = (anim,path)=>{anim.Sample();return new HumanBodyFullBones[0];};
 			}
 			//サンプリング時にトランスフォームが破壊されるのでダミーを作成してそちらで行う
 			GameObject dummy_game_object = CreateAnimationClipGameObject(animator_, clip, "clip");
@@ -621,7 +645,7 @@ public class AnimatorUtility
 	/// <param name="delta_time">サンプリング周期</param>
 	/// <param name="start_cb">初回サンプリング前コールバック</param>
 	/// <param name="update_cb">サンプリングコールバック</param>
-	private static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, System.Action<Animation> start_cb, System.Action<Animation> update_cb) {
+	private static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, System.Action<Animation> start_cb, System.Func<Animation, IEnumerable<string>, HumanBodyFullBones[]> update_cb) {
 		AnimatorUtility animator_utility = new AnimatorUtility(animation.gameObject.GetComponent<Animator>());
 		//戻り値バッファ作成
 		int muscles_length = System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
@@ -662,32 +686,38 @@ public class AnimatorUtility
 			}
 			//ポーズ適応
 			animation[clip_name].time = time;
-			update_cb(animation);
+			var target_paths = keyframe_transforms.Value.Select(x=>x.Key);
+			var add_bones = update_cb(animation, target_paths);
 			//ボーン走査
-			foreach (var keyframe_transform in keyframe_transforms.Value) {
-				//ボーン特定
-				string path = keyframe_transform.Key;
-				var bone_index_fuzzy = animator_utility.GetBoneIndexFromPath(path);
-				Transform transform = animator_utility.GetTransformFromPath(path);
-				if (bone_index_fuzzy.HasValue && (null != transform)) {
-					//ボーンインデックスとトランスフォームが特定出来たなら
-					HumanBodyFullBones bone_index = bone_index_fuzzy.Value;
-					{ //Muscle値作成
-						Quaternion rotation = transform.rotation;
-						var parent_bone_index_fuzzy = GetParentBoneIndex(bone_index);
-						if (parent_bone_index_fuzzy.HasValue) {
-							//親が居るなら
-							//相対値の算出
-							HumanBodyFullBones parent_bone_index = parent_bone_index_fuzzy.Value;
-							Transform parent_transform = animator_utility.GetTransformFromBoneIndex(parent_bone_index);
-							if (null != parent_transform) {
-								rotation = Quaternion.Inverse(parent_transform.rotation) * rotation;
-							}
+			var bone_indexes = keyframe_transforms.Value.Select(x=>x.Key) //パスの取り出し
+														.Select(x=>animator_utility.GetBoneIndexFromPath(x)) //ボーンインデックス変換
+														.Where(x=>x.HasValue) //ボーンインデックス変換に失敗した対象の除去
+														.Select(x=>x.Value) //Nullableオブジェクトからボーンインデックス取り出し
+														.Concat(add_bones) //追加要望ボーンインデックスの連結
+														.Distinct(); //重複削除
+			foreach (var bone_index in bone_indexes) {
+				Transform transform = animator_utility.GetTransformFromBoneIndex(bone_index);
+				if (null != transform) {
+					//トランスフォームが取得出来るなら
+					//Muscle値作成
+					Quaternion rotation = transform.rotation;
+					var parent_bone_index_fuzzy = GetParentBoneIndex(bone_index);
+					if (parent_bone_index_fuzzy.HasValue) {
+						//親が居るなら
+						//相対値の算出
+						HumanBodyFullBones parent_bone_index = parent_bone_index_fuzzy.Value;
+						Transform parent_transform = animator_utility.GetTransformFromBoneIndex(parent_bone_index);
+						if (null != parent_transform) {
+							//親のMuscle値に依る回転値を求め、それからの相対値を求める
+							Quaternion parent_rotation = animator_utility.GetMuscleNormalize(parent_bone_index, parent_transform.localRotation);
+							parent_rotation = parent_transform.parent.rotation * parent_rotation;
+							rotation = Quaternion.Inverse(parent_rotation) * rotation;
 						}
-						var values = animator_utility.GetMuscleValue(bone_index, rotation);
-						foreach (var value in values) {
-							result[(int)value.Key].Add(time, value.Value);
-						}
+					}
+					
+					var values = animator_utility.GetMuscleValue(bone_index, rotation);
+					foreach (var value in values) {
+						result[(int)value.Key].Add(time, value.Value);
 					}
 				}
 			}

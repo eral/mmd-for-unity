@@ -549,9 +549,11 @@ namespace MMD
 						//IKオンオフ
 						foreach (CCDIKSolver ik_script in mmd_engine.ik_list) {
 							switch (ik_script.name) {
-							case "右足ＩＫ":	ik_script.enabled = true;	break;
-							case "左足ＩＫ":	ik_script.enabled = true;	break;
-							default:			ik_script.enabled = false;	break;
+							case "右足ＩＫ":		ik_script.enabled = true;	break;
+							case "右つま先ＩＫ":	ik_script.enabled = true;	break;
+							case "左足ＩＫ":		ik_script.enabled = true;	break;
+							case "左つま先ＩＫ":	ik_script.enabled = true;	break;
+							default:				ik_script.enabled = false;	break;
 							}
 						}
 						
@@ -564,12 +566,53 @@ namespace MMD
 					}
 				};
 				//更新関数
-				System.Action<Animation> Update = animation=>{
+				System.Func<Animation, IEnumerable<string>, AnimatorUtility.HumanBodyFullBones[]> Update = (animation, paths)=>{
 					animation.Sample();
 					MMDEngine mmd_engine = animation.GetComponent<MMDEngine>();
 					if (null != mmd_engine) {
 						mmd_engine.LateUpdate();
 					}
+					//"足ＩＫ"関連のキーフレームが有れば足回りの追加キーフレーム打ちを申請する
+					var result = new List<AnimatorUtility.HumanBodyFullBones>();
+					var bone_names = paths.Where(x=>x.Contains("ＩＫ")) //パスにＩＫが含まれている対象に絞る
+											.Select(x=>animation.transform.Find(x)) //トランスフォーム変換
+											.Where(x=>null != x) //失敗なら除外
+											.Select(x=>x.GetComponent<CCDIKSolver>()) //CCDIKSolverコンポーネント変換
+											.Where(x=>null != x) //失敗なら除外
+											.Where(x=>x.enabled) //無効化されていたら除外
+											.Select(x=>x.name); //ゲームオブジェクト名変換
+					foreach (var bone_name in bone_names) {
+						switch (bone_name) {
+						case "右足ＩＫ":
+							result.AddRange(new []{
+								AnimatorUtility.HumanBodyFullBones.RightUpperLeg,
+								AnimatorUtility.HumanBodyFullBones.RightLowerLeg,
+								AnimatorUtility.HumanBodyFullBones.RightFoot,
+							});
+							break;
+						case "右つま先ＩＫ":
+							result.AddRange(new []{
+								AnimatorUtility.HumanBodyFullBones.RightToes,
+							});
+							break;
+						case "左足ＩＫ":
+							result.AddRange(new []{
+								AnimatorUtility.HumanBodyFullBones.LeftUpperLeg,
+								AnimatorUtility.HumanBodyFullBones.LeftLowerLeg,
+								AnimatorUtility.HumanBodyFullBones.LeftFoot,
+							});
+							break;
+						case "左つま先ＩＫ":
+							result.AddRange(new []{
+								AnimatorUtility.HumanBodyFullBones.LeftToes,
+							});
+							break;
+						default:
+							//empty.
+							break;
+						}
+					}
+					return result.ToArray();
 				};
 				AnimatorUtility animator_utility = new AnimatorUtility(animator);
 				clip = animator_utility.AdaptAnimationClip(clip, Start, Update);
