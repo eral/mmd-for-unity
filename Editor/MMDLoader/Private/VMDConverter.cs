@@ -112,20 +112,6 @@ namespace MMD
 			}
 			return count;
 		}
-		//キーフレームが1つの時、ダミーキーフレームを追加する
-		void AddDummyKeyframe(ref Keyframe[] keyframes)
-		{
-			if(keyframes.Length==1)
-			{
-				Keyframe[] newKeyframes=new Keyframe[2];
-				newKeyframes[0]=keyframes[0];
-				newKeyframes[1]=keyframes[0];
-				newKeyframes[1].time+=0.001f/60f;//1[ms]
-				newKeyframes[0].outTangent=0f;
-				newKeyframes[1].inTangent=0f;
-				keyframes=newKeyframes;
-			}
-		}
 		// 任意の型のvalueを持つキーフレーム
 		abstract class CustomKeyframe<Type>
 		{
@@ -273,9 +259,6 @@ namespace MMD
 					rz_keys[i].inTangent=tz;
 				}
 			}
-			AddDummyKeyframe(ref rx_keys);
-			AddDummyKeyframe(ref ry_keys);
-			AddDummyKeyframe(ref rz_keys);
 		}
 		
 		
@@ -342,7 +325,6 @@ namespace MMD
 					keys[i].inTangent=t;
 				}
 			}
-			AddDummyKeyframe(ref keys);
 			return keys;
 		}
 		// 移動のみの抽出
@@ -439,7 +421,6 @@ namespace MMD
 						keyframe[i].inTangent=t;
 						}
 				}
-				AddDummyKeyframe(ref keyframe);
 
 				// Z軸移動にキーフレームを打つ
 				AnimationCurve curve = new AnimationCurve(keyframe);

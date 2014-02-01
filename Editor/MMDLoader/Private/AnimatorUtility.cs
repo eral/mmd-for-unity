@@ -314,6 +314,49 @@ public class AnimatorUtility
 	}
 	
 	/// <summary>
+	/// Point値の取得
+	/// </summary>
+	/// <returns>Pointsインデックスと値の辞書</returns>
+	/// <param name="index">ボーンインデックス</param>
+	/// <param name="position">位置</param>
+	/// <param name="rotation">回転値</param>
+	private Dictionary<HumanBodyPoints, float> GetPointValue(HumanBodyFullBones index, Vector3 position, Quaternion rotation) {
+		Dictionary<HumanBodyPoints, float> result = new Dictionary<HumanBodyPoints, float>();
+		
+		//登録用関数の作成
+		System.Action<HumanBodyPoints, Vector3, Quaternion> SetResult = (start_index, bone_position, bone_rotation)=>{
+			for (int i = 0, i_max = 3; i < i_max; ++i) {
+				result.Add((HumanBodyPoints)(start_index + i), bone_position[i]);
+			}
+			for (int i = 0, i_max = 4; i < i_max; ++i) {
+				result.Add((HumanBodyPoints)(start_index + i + 3), bone_rotation[i]);
+			}
+		};
+		
+		switch (index) {
+		case HumanBodyFullBones.Hips:
+			SetResult(HumanBodyPoints.RootPositionX, position, rotation);
+			break;
+		case HumanBodyFullBones.LeftFoot:
+			SetResult(HumanBodyPoints.LeftFootPositionX, position, rotation);
+			break;
+		case HumanBodyFullBones.RightFoot:
+			SetResult(HumanBodyPoints.RightFootPositionX, position, rotation);
+			break;
+		case HumanBodyFullBones.LeftHand:
+			SetResult(HumanBodyPoints.LeftHandPositionX, position, rotation);
+			break;
+		case HumanBodyFullBones.RightHand:
+			SetResult(HumanBodyPoints.RightHandPositionX, position, rotation);
+			break;
+		default:
+			//empty.
+			break;
+		}
+		return result;
+	}
+	
+	/// <summary>
 	/// 基本ポーズのボーン回転値の取得
 	/// </summary>
 	/// <returns>Tポーズのボーン回転値</returns>
@@ -414,7 +457,7 @@ public class AnimatorUtility
 		Transform result = null;
 		int human_index = GetHumanIndexFromBoneIndex(index);
 		var path = GetPathFromHumanIndex(human_index);
-		result = GetTransformFromPath(animator_, path);
+		result = GetTransformFromPath(path);
 		return result;
 	}
 	
@@ -425,7 +468,7 @@ public class AnimatorUtility
 	public Transform GetTransformFromRootBone() {
 		Transform result = null;
 		var path = GetPathFromHumanIndex(0);
-		result = GetTransformFromPath(animator_, path);
+		result = GetTransformFromPath(path);
 		return result;
 	}
 	
@@ -486,7 +529,7 @@ public class AnimatorUtility
 	private Transform GetTransformFromHumanIndex(int index) {
 		Transform result = null;
 		var path = GetPathFromHumanIndex(index);
-		result = GetTransformFromPath(animator_, path);
+		result = GetTransformFromPath(path);
 		return result;
 	}
 	
@@ -517,8 +560,6 @@ public class AnimatorUtility
 		AnimationClip result = null;
 		if (animator_.avatar.isHuman && !clip.isHumanMotion) {
 			//アバターが人型 かつ アニメーションクリップが人型未対応なら
-			//サンプリング時にトランスフォームが破壊されるのでダミーを作成してそちらで行う
-			GameObject dummy_game_object = CreateAnimationClipGameObject(animator_, clip, "clip");
 			//初回更新関数と更新関数の生成
 			if (null == start) {
 				start = x=>{};
@@ -526,11 +567,11 @@ public class AnimatorUtility
 			if (null == update) {
 				update = x=>x.Sample();
 			}
+			//サンプリング時にトランスフォームが破壊されるのでダミーを作成してそちらで行う
+			GameObject dummy_game_object = CreateAnimationClipGameObject(animator_, clip, "clip");
 			//フレームレートに準じてサンプリング
 			Animation dummy_animation = dummy_game_object.GetComponent<Animation>();
-			float delta_time = 1.0f; //1.0f / clip.frameRate;
-			start(dummy_animation);
-			var muscle_value_animations = CreateMuscleValueAnimation(dummy_animation, "clip", delta_time, update);
+			var muscle_value_animations = CreateMuscleValueAnimation(dummy_animation, "clip", start, update);
 			//ダミー破棄
 			GameObject.DestroyImmediate(dummy_game_object);
 			//人型アバター対応アニメーションクリップの作成
@@ -578,13 +619,11 @@ public class AnimatorUtility
 	/// <param name="animation">サンプリングするアニメーション(トランスフォームを破壊します)</param>
 	/// <param name="clip_name">サンプリングするクリップ名</param>
 	/// <param name="delta_time">サンプリング周期</param>
-	/// <param name="sample_cb">サンプリングコールバック</param>
-	private static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, float delta_time, System.Action<Animation> sample_cb) {
+	/// <param name="start_cb">初回サンプリング前コールバック</param>
+	/// <param name="update_cb">サンプリングコールバック</param>
+	private static Dictionary<float, float>[] CreateMuscleValueAnimation(Animation animation, string clip_name, System.Action<Animation> start_cb, System.Action<Animation> update_cb) {
 		AnimatorUtility animator_utility = new AnimatorUtility(animation.gameObject.GetComponent<Animator>());
-		//アニメーションクリップの有効化
-		animation[clip_name].weight = 1.0f;
-		animation[clip_name].enabled = true;
-		//フレームレートに準じてサンプリング
+		//戻り値バッファ作成
 		int muscles_length = System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
 		int points_length = System.Enum.GetValues(typeof(HumanBodyPoints)).Length;
 		Dictionary<float, float>[] result = new Dictionary<float, float>[muscles_length + points_length];
@@ -596,23 +635,193 @@ public class AnimatorUtility
 		for (int i = muscles_length, i_max = result.Length; i < i_max; ++i) {
 			result[i] = new Dictionary<float, float>();
 		}
-		for (float t = 0.0f, t_max = animation[clip_name].length; t < t_max; t += delta_time) {
-			animation[clip_name].time = t;
-			sample_cb(animation);
-			float[] muscle_value = animator_utility.GetMuscleValue();
-			for (int i = 0, i_max = muscle_value.Length; i < i_max; ++i) {
-				if (null != result[i]) {
-					result[i].Add(t, muscle_value[i]);
+		//アニメーションクリップの有効化
+		animation[clip_name].weight = 1.0f;
+		animation[clip_name].enabled = true;
+		//初回サンプリング前
+		start_cb(animation);
+		//サンプリング
+		var curves = AnimationUtility.GetAllCurves(animation[clip_name].clip, true);
+		var keyframes_transforms = PigeonholeAnimationClipCurveData(curves);
+		//時刻走査
+		float frame_rate = animation[clip_name].clip.frameRate;
+		foreach (var keyframe_transforms in keyframes_transforms) {
+			float time = (keyframe_transforms.Key * frame_rate + 0.5f) / frame_rate; //フレーム単位に整形
+			//プログレスバー表示
+			var is_cancel = EditorUtility.DisplayCancelableProgressBar("Convert From LegacyAnimation To MusclesAnimation"
+																	, string.Format("{0:#00.00%}  {1:##0.00}／{2:##0.00}  ({3:#0})"
+																					, time / animation[clip_name].length
+																					, time
+																					, animation[clip_name].length
+																					, keyframe_transforms.Value.Count()
+																					)
+																	, time / animation[clip_name].length
+																	);
+			if (is_cancel) {
+				break;
+			}
+			//ポーズ適応
+			animation[clip_name].time = time;
+			update_cb(animation);
+			//ボーン走査
+			foreach (var keyframe_transform in keyframe_transforms.Value) {
+				//ボーン特定
+				string path = keyframe_transform.Key;
+				var bone_index_fuzzy = animator_utility.GetBoneIndexFromPath(path);
+				Transform transform = animator_utility.GetTransformFromPath(path);
+				if (bone_index_fuzzy.HasValue && (null != transform)) {
+					//ボーンインデックスとトランスフォームが特定出来たなら
+					HumanBodyFullBones bone_index = bone_index_fuzzy.Value;
+					{ //Muscle値作成
+						Quaternion rotation = transform.rotation;
+						var parent_bone_index_fuzzy = GetParentBoneIndex(bone_index);
+						if (parent_bone_index_fuzzy.HasValue) {
+							//親が居るなら
+							//相対値の算出
+							HumanBodyFullBones parent_bone_index = parent_bone_index_fuzzy.Value;
+							Transform parent_transform = animator_utility.GetTransformFromBoneIndex(parent_bone_index);
+							if (null != parent_transform) {
+								rotation = Quaternion.Inverse(parent_transform.rotation) * rotation;
+							}
+						}
+						var values = animator_utility.GetMuscleValue(bone_index, rotation);
+						foreach (var value in values) {
+							result[(int)value.Key].Add(time, value.Value);
+						}
+					}
 				}
 			}
-			float[] point_value = animator_utility.GetPointValue();
-			for (int i = 0, i_max = point_value.Length; i < i_max; ++i) {
-				result[i + muscles_length].Add(t, point_value[i]);
+			{ //Points値作成
+				var values = animator_utility.GetPointValue();
+				for (int i = 0, i_max = values.Length; i < i_max; ++i) {
+					int key_index = i + System.Enum.GetValues(typeof(HumanBodyMuscles)).Length;
+					result[key_index].Add(time, values[i]);
+				}
+			}
+		}
+		//プログレスバー削除
+		EditorUtility.ClearProgressBar();
+		return result;
+	}
+
+	/// <summary>
+	/// 複数のアニメーションカーブデータをトランスフォーム単位で整理する
+	/// </summary>
+	/// <returns>トランスフォーム単位のアニメーションカーブデータ</returns>
+	/// <param name="curves">複数のアニメーションカーブデータ</param>
+	private static Dictionary<float, Dictionary<string, PortableTransform>> PigeonholeAnimationClipCurveData(AnimationClipCurveData[] curves) {
+		var position = new Dictionary<string, Dictionary<float, Vector3>>();
+		var rotation = new Dictionary<string, Dictionary<float, Vector4>>(); //Quaternionを1要素ずつ設定すると正規化が行われてしまうので一旦Vector4に格納
+		var scale = new Dictionary<string, Dictionary<float, Vector3>>();
+		var time = new Dictionary<float, object>();
+		foreach (var curve in curves) {
+			string path = curve.path;
+			if (!position.ContainsKey(path)) {
+				position[path] = new Dictionary<float, Vector3>();
+				rotation[path] = new Dictionary<float, Vector4>();
+				scale[path] = new Dictionary<float, Vector3>();
+			}
+			foreach (var key in curve.curve.keys) {
+				//指定時刻マーク
+				time[key.time] = null;
+				//指定時刻がまだ無ければ作成
+				switch (curve.propertyName) {
+				//位置
+				case "m_LocalPosition.x": goto case "m_LocalPosition.z";
+				case "m_LocalPosition.y": goto case "m_LocalPosition.z";
+				case "m_LocalPosition.z":
+					if (!position[path].ContainsKey(key.time)) {
+						position[path][key.time] = Vector3.zero;
+					}
+					switch (curve.propertyName.Substring(16)) {
+					case "x":
+						position[path][key.time] = new Vector3(key.value                 , position[path][key.time].y, position[path][key.time].z);
+						break;
+					case "y":
+						position[path][key.time] = new Vector3(position[path][key.time].x, key.value                 , position[path][key.time].z);
+						break;
+					case "z":
+						position[path][key.time] = new Vector3(position[path][key.time].x, position[path][key.time].y, key.value                 );
+						break;
+					}
+					break;
+				//回転
+				case "m_LocalRotation.x": goto case "m_LocalRotation.w";
+				case "m_LocalRotation.y": goto case "m_LocalRotation.w";
+				case "m_LocalRotation.z": goto case "m_LocalRotation.w";
+				case "m_LocalRotation.w":
+					if (!rotation[path].ContainsKey(key.time)) {
+						var q = Quaternion.identity;
+						rotation[path][key.time] = new Vector4(q.x, q.y, q.z, q.w);
+					}
+					switch (curve.propertyName.Substring(16)) {
+					case "x":
+						rotation[path][key.time] = new Vector4(key.value                 , rotation[path][key.time].y, rotation[path][key.time].z, rotation[path][key.time].w);
+						break;
+					case "y":
+						rotation[path][key.time] = new Vector4(rotation[path][key.time].x, key.value                 , rotation[path][key.time].z, rotation[path][key.time].w);
+						break;
+					case "z":
+						rotation[path][key.time] = new Vector4(rotation[path][key.time].x, rotation[path][key.time].y, key.value                 , rotation[path][key.time].w);
+						break;
+					case "w":
+						rotation[path][key.time] = new Vector4(rotation[path][key.time].x, rotation[path][key.time].y, rotation[path][key.time].z, key.value                 );
+						break;
+					}
+					break;
+				//拡縮
+				case "m_LocalScale.x": goto case "m_LocalScale.z";
+				case "m_LocalScale.y": goto case "m_LocalScale.z";
+				case "m_LocalScale.z":
+					if (!scale[path].ContainsKey(key.time)) {
+						scale[path][key.time] = Vector3.one;
+					}
+					switch (curve.propertyName.Substring(13)) {
+					case "x":
+						scale[path][key.time] = new Vector3(key.value              , scale[path][key.time].y, scale[path][key.time].z);
+						break;
+					case "y":
+						scale[path][key.time] = new Vector3(scale[path][key.time].x, key.value              , scale[path][key.time].z);
+						break;
+					case "z":
+						scale[path][key.time] = new Vector3(scale[path][key.time].x, scale[path][key.time].y, key.value              );
+						break;
+					}
+					break;
+				default:
+					throw new System.ArgumentException();
+				}
+			}
+		}
+		//PortableTransform化
+		var result = new Dictionary<float, Dictionary<string, PortableTransform>>();
+		var times = time.Select(x=>x.Key).ToArray();
+		System.Array.Sort(times);
+		foreach (var t in times) {
+			result.Add(t, new Dictionary<string, PortableTransform>());
+			foreach (var n in position.Select(x=>x.Key)) {
+				var has_position = position[n].ContainsKey(t);
+				var has_rotation = rotation[n].ContainsKey(t);
+				var has_scale = scale[n].ContainsKey(t);
+				if (has_position || has_rotation || has_scale) {
+					//指定時刻にキーフレームを持つパスが有るなら
+					var transform = PortableTransform.identity;
+					if (has_position) {
+						transform.position = position[n][t];
+					}
+					if (has_rotation) {
+						transform.rotation = new Quaternion(rotation[n][t].x, rotation[n][t].y, rotation[n][t].z, rotation[n][t].w);
+					}
+					if (has_scale) {
+						transform.scale = scale[n][t];
+					}
+					result[t].Add(n, transform);
+				}
 			}
 		}
 		return result;
 	}
-
+	
 	/// <summary>
 	/// 人型アバター対応アニメーションクリップを作成する
 	/// </summary>
@@ -672,7 +881,7 @@ public class AnimatorUtility
 	private Transform GetTransformFromSkeletonIndex(int index) {
 		Transform result = null;
 		var path = GetPathFromSkeletonIndex(index);
-		result = GetTransformFromPath(animator_, path);
+		result = GetTransformFromPath(path);
 		return result;
 	}
 	
@@ -696,12 +905,47 @@ public class AnimatorUtility
 	/// ノードパスからノードトランスフォームの取得
 	/// </summary>
 	/// <returns>ノードトランスフォーム</returns>
-	/// <param name="animator">アニメーター</param>
 	/// <param name="path">ノードパス</param>
-	private static Transform GetTransformFromPath(Animator animator, string path) {
+	private Transform GetTransformFromPath(string path) {
 		Transform result = null;
-		if ((null != animator) && !string.IsNullOrEmpty(path)) {
-			result = animator.transform.FindChild(path);
+		if (!string.IsNullOrEmpty(path)) {
+			result = animator_.transform.FindChild(path);
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// ノードパスからボーンインデックスの取得
+	/// </summary>
+	/// <returns>ボーンインデックス</returns>
+	/// <param name="path">ノードパス</param>
+	private HumanBodyFullBones? GetBoneIndexFromPath(string path) {
+		HumanBodyFullBones? result = null;
+		var bone_human = Enumerable.Range(0, bone_index_to_human_index_.Length)
+									.Select(x=>new {bone_index = x, human_index = bone_index_to_human_index_[x]});
+		var human_hash = Enumerable.Range(0, human_index_to_hash_.Length)
+									.Select(x=>new {human_index = x, hash = human_index_to_hash_[x]});
+		var bone_index_linq = hash_to_path_.Where(x=>x.Value == path)
+											.Join(human_hash, x=>x.Key, y=>y.hash, (x,y)=>y.human_index)
+											.Join(bone_human, x=>x, y=>y.human_index, (x,y)=>y.bone_index);
+		if (0 < bone_index_linq.Count()) {
+			result = (HumanBodyFullBones)bone_index_linq.First();
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// 親ボーンインデックスの取得
+	/// </summary>
+	/// <returns>親ボーンインデックス</returns>
+	/// <param name="inex">ボーンインデックス</param>
+	private static HumanBodyFullBones? GetParentBoneIndex(HumanBodyFullBones index) {
+		HumanBodyFullBones? result = null;
+		if ((uint)index < (uint)c_parent_bone_index.Length) {
+			var parent_index = c_parent_bone_index[(int)index];
+			if ((uint)parent_index < (uint)System.Enum.GetValues(typeof(HumanBodyFullBones)).Length) {
+				result = parent_index;
+			}
 		}
 		return result;
 	}
@@ -939,6 +1183,14 @@ public class AnimatorUtility
 		public Vector3		position;
 		public Quaternion	rotation;
 		public Vector3		scale;
+		
+		public static PortableTransform identity {get{
+			PortableTransform result = new PortableTransform();
+			result.position = Vector3.zero;
+			result.rotation = Quaternion.identity;
+			result.scale = Vector3.one;
+			return result;
+		}}
 	}
 	PortableTransform[] human_transform_for_t_pose_ = null;
 	
@@ -1116,5 +1368,63 @@ public class AnimatorUtility
 		"RightHandQ.y",
 		"RightHandQ.z",
 		"RightHandQ.w",
+	};
+
+	private static readonly HumanBodyFullBones[] c_parent_bone_index = new [] {
+		(HumanBodyFullBones)(-1),			//Hips,
+		HumanBodyFullBones.Hips,			//LeftUpperLeg,
+		HumanBodyFullBones.Hips,			//RightUpperLeg,
+		HumanBodyFullBones.LeftUpperLeg,	//LeftLowerLeg,
+		HumanBodyFullBones.RightUpperLeg,	//RightLowerLeg,
+		HumanBodyFullBones.LeftLowerLeg,	//LeftFoot,
+		HumanBodyFullBones.RightLowerLeg,	//RightFoot,
+		HumanBodyFullBones.Hips,			//Spine,
+		HumanBodyFullBones.Spine,			//Chest,
+		HumanBodyFullBones.Chest,			//Neck,
+		HumanBodyFullBones.Neck,			//Head,
+		HumanBodyFullBones.Chest,			//LeftShoulder,
+		HumanBodyFullBones.Chest,			//RightShoulder,
+		HumanBodyFullBones.LeftShoulder,	//LeftUpperArm,
+		HumanBodyFullBones.RightShoulder,	//RightUpperArm,
+		HumanBodyFullBones.LeftUpperArm,	//LeftLowerArm,
+		HumanBodyFullBones.RightUpperArm,	//RightLowerArm,
+		HumanBodyFullBones.LeftLowerArm,	//LeftHand,
+		HumanBodyFullBones.RightLowerArm,	//RightHand,
+		HumanBodyFullBones.LeftFoot,		//LeftToes,
+		HumanBodyFullBones.RightFoot,		//RightToes,
+		HumanBodyFullBones.Head,			//LeftEye,
+		HumanBodyFullBones.Head,			//RightEye,
+		HumanBodyFullBones.Head,			//Jaw,
+		
+		HumanBodyFullBones.LeftHand,				//LeftThumbProximal,
+		HumanBodyFullBones.LeftThumbProximal,		//LeftThumbIntermediate,
+		HumanBodyFullBones.LeftThumbIntermediate,	//LeftThumbDistal,
+		HumanBodyFullBones.LeftHand,				//LeftIndexProximal,
+		HumanBodyFullBones.LeftIndexProximal,		//LeftIndexIntermediate,
+		HumanBodyFullBones.LeftIndexIntermediate,	//LeftIndexDistal,
+		HumanBodyFullBones.LeftHand,				//LeftMiddleProximal,
+		HumanBodyFullBones.LeftMiddleProximal,		//LeftMiddleIntermediate,
+		HumanBodyFullBones.LeftMiddleIntermediate,	//LeftMiddleDistal,
+		HumanBodyFullBones.LeftHand,				//LeftRingProximal,
+		HumanBodyFullBones.LeftRingProximal,		//LeftRingIntermediate,
+		HumanBodyFullBones.LeftRingIntermediate,	//LeftRingDistal,
+		HumanBodyFullBones.LeftHand,				//LeftLittleProximal,
+		HumanBodyFullBones.LeftLittleProximal,		//LeftLittleIntermediate,
+		HumanBodyFullBones.LeftLittleIntermediate,	//LeftLittleDistal,
+		HumanBodyFullBones.RightHand,				//RightThumbProximal,
+		HumanBodyFullBones.RightThumbProximal,		//RightThumbIntermediate,
+		HumanBodyFullBones.RightThumbIntermediate,	//RightThumbDistal,
+		HumanBodyFullBones.RightHand,				//RightIndexProximal,
+		HumanBodyFullBones.RightIndexProximal,		//RightIndexIntermediate,
+		HumanBodyFullBones.RightIndexIntermediate,	//RightIndexDistal,
+		HumanBodyFullBones.RightHand,				//RightMiddleProximal,
+		HumanBodyFullBones.RightMiddleProximal,		//RightMiddleIntermediate,
+		HumanBodyFullBones.RightMiddleIntermediate,	//RightMiddleDistal,
+		HumanBodyFullBones.RightHand,				//RightRingProximal,
+		HumanBodyFullBones.RightRingProximal,		//RightRingIntermediate,
+		HumanBodyFullBones.RightRingIntermediate,	//RightRingDistal,
+		HumanBodyFullBones.RightHand,				//RightLittleProximal,
+		HumanBodyFullBones.RightLittleProximal,		//RightLittleIntermediate,
+		HumanBodyFullBones.RightLittleIntermediate,	//RightLittleDistal,
 	};
 }
