@@ -271,6 +271,29 @@ public class AnimatorUtility
 	}
 	
 	/// <summary>
+	/// Muscleに整形した回転値の取得
+	/// </summary>
+	/// <returns>Muscleに整形した回転値</returns>
+	/// <param name="index">ボーンインデックス</param>
+	/// <param name="rotation">回転値</param>
+	private Quaternion GetMuscleNormalize(HumanBodyFullBones index, Quaternion rotation) {
+		//Muscle値算出
+		AxesInformation axes_information = GetAxesInformation(index);
+		Vector3 rotation_avatar = (Quaternion.Inverse(axes_information.pre_quaternion) * rotation * axes_information.post_quaternion).eulerAngles;
+		//軸操作
+		for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
+			HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)index, axis_index);
+			if ((uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length <= (uint)muscle_index) {
+				//Muscle未対象なら
+				//無回転化
+				rotation_avatar[axis_index] = 0.0f;
+			}
+		}
+		Quaternion result = axes_information.pre_quaternion * Quaternion.Euler(rotation_avatar) * Quaternion.Inverse(axes_information.post_quaternion);
+		return result;
+	}
+	
+	/// <summary>
 	/// Point値の取得
 	/// </summary>
 	/// <returns>(現在の姿勢の)Point値配列</returns>
@@ -682,7 +705,10 @@ public class AnimatorUtility
 							HumanBodyFullBones parent_bone_index = parent_bone_index_fuzzy.Value;
 							Transform parent_transform = animator_utility.GetTransformFromBoneIndex(parent_bone_index);
 							if (null != parent_transform) {
-								rotation = Quaternion.Inverse(parent_transform.rotation) * rotation;
+								//親のMuscle値に依る回転値を求め、それからの相対値を求める
+								Quaternion parent_rotation = animator_utility.GetMuscleNormalize(parent_bone_index, parent_transform.localRotation);
+								parent_rotation = parent_transform.parent.rotation * parent_rotation;
+								rotation = Quaternion.Inverse(parent_rotation) * rotation;
 							}
 						}
 						var values = animator_utility.GetMuscleValue(bone_index, rotation);
