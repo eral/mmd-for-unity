@@ -564,12 +564,23 @@ namespace MMD
 					}
 				};
 				//更新関数
-				System.Action<Animation> Update = animation=>{
+				System.Func<Animation, AnimatorUtility.HumanBodyFullBones[]> Update = animation=>{
 					animation.Sample();
 					MMDEngine mmd_engine = animation.GetComponent<MMDEngine>();
 					if (null != mmd_engine) {
 						mmd_engine.LateUpdate();
 					}
+					AnimatorUtility.HumanBodyFullBones[] result = new []{
+						AnimatorUtility.HumanBodyFullBones.LeftUpperLeg,
+						AnimatorUtility.HumanBodyFullBones.RightUpperLeg,
+						AnimatorUtility.HumanBodyFullBones.LeftLowerLeg,
+						AnimatorUtility.HumanBodyFullBones.RightLowerLeg,
+						AnimatorUtility.HumanBodyFullBones.LeftFoot,
+						AnimatorUtility.HumanBodyFullBones.RightFoot,
+						AnimatorUtility.HumanBodyFullBones.LeftToes,
+						AnimatorUtility.HumanBodyFullBones.RightToes,
+					};
+					return result;
 				};
 				AnimatorUtility animator_utility = new AnimatorUtility(animator);
 				clip = animator_utility.AdaptAnimationClip(clip, Start, Update);
