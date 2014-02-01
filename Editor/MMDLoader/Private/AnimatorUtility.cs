@@ -680,7 +680,7 @@ public class AnimatorUtility
 					//ボーンインデックスとトランスフォームが特定出来たなら
 					HumanBodyFullBones bone_index = bone_index_fuzzy.Value;
 					{ //Muscle値作成
-						var values = animator_utility.GetMuscleValue(bone_index, transform.rotation);
+						var values = animator_utility.GetMuscleValue(bone_index, transform.localRotation);
 						foreach (var value in values) {
 							result[(int)value.Key].Add(time, value.Value);
 						}
