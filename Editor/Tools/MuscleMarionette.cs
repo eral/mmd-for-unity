@@ -61,6 +61,7 @@ public class MuscleMarionette : EditorWindow {
 		}
 		GUI.enabled = (null != avatar);
 		is_dirty = OnGUIforPoseButton() || is_dirty;
+		is_dirty = OnGUIforAnimationButton() || is_dirty;
 		is_dirty = OnGUIforGroup() || is_dirty;
 		is_dirty = OnGUIforMuscles() || is_dirty;
 
@@ -162,8 +163,13 @@ public class MuscleMarionette : EditorWindow {
 				is_update = true;
 			}
 #endif
-			if (GUILayout.Button("Reset", EditorStyles.miniButtonRight)) {
+			if (GUILayout.Button("Reset", EditorStyles.miniButtonMid)) {
 				ResetValue();
+				
+				is_update = true;
+			}
+			if (GUILayout.Button("ReSample", EditorStyles.miniButtonRight)) {
+				PoseToValue();
 				
 				is_update = true;
 			}
@@ -189,6 +195,69 @@ public class MuscleMarionette : EditorWindow {
 		}
 		EditorGUILayout.EndHorizontal();
 		
+		return is_update;
+	}
+	
+	/// <summary>
+	/// アニメーションボタンの為のGUI描画
+	/// </summary>
+	/// <returns>更新が有ったか(true:更新有り, false:未更新)</returns>
+	private bool OnGUIforAnimationButton() {
+		bool is_update = false;
+		
+		clip_ = (AnimationClip)EditorGUILayout.ObjectField("AnimationClip", clip_, typeof(AnimationClip), false);
+		if (null != clip_) {
+			//AnimationClipが有るなら
+			EditorGUILayout.BeginHorizontal();
+			{
+				if (GUILayout.Button("Sample", EditorStyles.miniButton)) {
+					GameObject tempGameObject = (GameObject)GameObject.Instantiate(animator_.gameObject, Vector3.zero, Quaternion.identity);
+					GameObject.DestroyImmediate(tempGameObject.GetComponent<Animator>());
+					Animation animation = tempGameObject.GetComponent<Animation>();
+					if (null != animation) {
+						DestroyImmediate(animation);
+					}
+					animation = tempGameObject.AddComponent<Animation>();
+					AnimationClip clip = (AnimationClip)Instantiate(clip_);
+					AnimationUtility.SetAnimationType(clip, ModelImporterAnimationType.Legacy);
+					animation.AddClip(clip, "clip");
+					animation.clip = clip;
+					animation["clip"].weight = 1.0f;
+					animation["clip"].enabled = true;
+					animation["clip"].time = clip_time_;
+					animation.Sample();
+					//更新が有ったなら
+					MMDEngine mmd_engine = tempGameObject.GetComponent<MMDEngine>();
+					if (null != mmd_engine) {
+						foreach (CCDIKSolver ik_script in mmd_engine.ik_list) {
+							switch (ik_script.name) {
+							case "右足ＩＫ":		ik_script.enabled = true;	break;
+							case "右つま先ＩＫ":	ik_script.enabled = true;	break;
+							case "左足ＩＫ":		ik_script.enabled = true;	break;
+							case "左つま先ＩＫ":	ik_script.enabled = true;	break;
+							default:				ik_script.enabled = false;	break;
+							}
+						}
+						mmd_engine.LateUpdate();
+					}
+					System.Action<Transform, Transform> CopyTransform = null;
+					CopyTransform = (dst,src)=>{
+						foreach (Transform child in dst) {
+							CopyTransform(child, src.FindChild(child.name));
+						}
+						dst.localPosition = src.localPosition;
+						dst.localRotation = src.localRotation;
+						dst.localScale = src.localScale;
+					};
+					CopyTransform(animator_.transform, animation.transform);
+					GameObject.DestroyImmediate(tempGameObject);
+
+					//is_update = true; //更新を掛けるとMuscleポーズで上書かれるのでしない
+				}
+				clip_time_ = EditorGUILayout.Slider(clip_time_, 0.0f, clip_.length);
+			}
+			EditorGUILayout.EndHorizontal();
+		}
 		return is_update;
 	}
 	
@@ -582,6 +651,8 @@ public class MuscleMarionette : EditorWindow {
 	private float[] group_value_ = null;
 	private float[] muscles_value_ = null;
 	private float[] muscles_first_value_ = null;
+	private AnimationClip clip_ = null;
+	private float clip_time_ = 0.0f;
 	
 	private static	bool		group_tree_displays_;	//グループツリー表示
 	private static	bool[]		limb_tree_displays_;	//四肢ツリー表示
