@@ -194,6 +194,14 @@ public class AvatarSettingScript
 																			human_bone.limit.useDefaultValues = true;
 																			return human_bone;
 																		};
+		System.Func<string, string, Vector3, Vector3, HumanBone> CreateHintMinMax = (key, value, min, max)=>{
+																			HumanBone human_bone = new HumanBone();
+																			human_bone.humanName = key;
+																			human_bone.boneName = value;
+																			human_bone.limit.min = min;
+																			human_bone.limit.max = max;
+																			return human_bone;
+																		};
 		
 		List<HumanBone> bone_name = new List<HumanBone>();
 
@@ -207,7 +215,16 @@ public class AvatarSettingScript
 		} else {
 			bone_name.Add(CreateHint("Hips",	"センター"	));	//ヒップ◆
 		}
-		bone_name.Add(CreateHint("Spine",		"上半身"	));	//背骨◆
+		bone_name.Add(CreateHintMinMax("Spine",	"上半身"
+										, new Vector3(HumanTrait.GetMuscleDefaultMin(HumanTrait.MuscleFromBone((int)HumanBodyBones.Spine, 0))
+													, HumanTrait.GetMuscleDefaultMin(HumanTrait.MuscleFromBone((int)HumanBodyBones.Spine, 1))
+													, HumanTrait.GetMuscleDefaultMin(HumanTrait.MuscleFromBone((int)HumanBodyBones.Spine, 2)) * 2.0f //前屈を柔らかくする(40°→80°)
+													)
+										, new Vector3(HumanTrait.GetMuscleDefaultMax(HumanTrait.MuscleFromBone((int)HumanBodyBones.Spine, 0))
+													, HumanTrait.GetMuscleDefaultMax(HumanTrait.MuscleFromBone((int)HumanBodyBones.Spine, 1))
+													, HumanTrait.GetMuscleDefaultMax(HumanTrait.MuscleFromBone((int)HumanBodyBones.Spine, 2))
+													)
+										));	//背骨◆
 		if (HasBone("胸")) {
 			bone_name.Add(CreateHint("Chest",	"胸"		));	//胸△
 		} else {
