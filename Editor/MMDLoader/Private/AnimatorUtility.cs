@@ -252,12 +252,12 @@ public class AnimatorUtility
 		//Muscle値算出
 		AxesInformation axes_information = GetAxesInformation(index);
 		Quaternion quaternion_avatar = Quaternion.Inverse(axes_information.pre_quaternion) * rotation * axes_information.post_quaternion;
-		quaternion_avatar = new Quaternion(quaternion_avatar.x * axes_information.sign.x, quaternion_avatar.y * axes_information.sign.y, quaternion_avatar.z * axes_information.sign.z, quaternion_avatar.w * axes_information.sign.w);
 		Vector3 euler_avatar = quaternion_avatar.eulerAngles;
 		//軸操作
 		for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
 			float value = euler_avatar[axis_index];
 			value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 360.0f: value)); //範囲を-180.0f～180.0fに収める
+			value *= axes_information.sign[axis_index];
 			if ((value < 0) && (0 != axes_information.limit.min[axis_index])) {
 				//標準ポーズより小さいなら
 				value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg); 
@@ -295,6 +295,7 @@ public class AnimatorUtility
 		AxesInformation axes_information = GetAxesInformation(index);
 		var muscle_values = GetMuscleValue(index, rotation);
 		//Muscle値から回転値復元
+		muscle_values = new Vector3(muscle_values.x * axes_information.sign.x, muscle_values.y * axes_information.sign.y, muscle_values.z * axes_information.sign.z);
 		Quaternion quaternion = Quaternion.Euler(muscle_values);
 		quaternion = new Quaternion(quaternion.x * axes_information.sign.x, quaternion.y * axes_information.sign.y, quaternion.z * axes_information.sign.z, quaternion.w * axes_information.sign.w);
 		Quaternion result = axes_information.pre_quaternion * quaternion * Quaternion.Inverse(axes_information.post_quaternion);
