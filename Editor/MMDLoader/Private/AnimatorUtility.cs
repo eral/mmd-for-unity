@@ -263,6 +263,16 @@ public class AnimatorUtility
 					//標準ポーズより大きいなら
 					value = value / (axes_information.limit.max[axis_index] * Mathf.Rad2Deg);
 				}
+				//背骨・胸ボーンは下半身と分け合うので2倍化
+				switch (index) {
+				case HumanBodyFullBones.Spine: goto case HumanBodyFullBones.Chest;
+				case HumanBodyFullBones.Chest:
+					value *= 2.0f;
+					break;
+				default:
+					//empty.
+					break;
+				}
 				value = Mathf.Clamp(value, -1.0f, 1.0f);
 				result.Add (muscle_index, value);
 			}
@@ -714,7 +724,7 @@ public class AnimatorUtility
 							rotation = Quaternion.Inverse(parent_rotation) * rotation;
 						}
 					}
-					
+					//Muscle値変換
 					var values = animator_utility.GetMuscleValue(bone_index, rotation);
 					foreach (var value in values) {
 						result[(int)value.Key].Add(time, value.Value);
