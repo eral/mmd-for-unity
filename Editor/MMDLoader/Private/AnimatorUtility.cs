@@ -285,24 +285,6 @@ public class AnimatorUtility
 	}
 	
 	/// <summary>
-	/// Muscleに整形した回転値の取得
-	/// </summary>
-	/// <returns>Muscleに整形した回転値</returns>
-	/// <param name="index">ボーンインデックス</param>
-	/// <param name="rotation">回転値</param>
-	private Quaternion GetMuscleNormalize(HumanBodyFullBones index, Quaternion rotation) {
-		//Muscle値算出
-		AxesInformation axes_information = GetAxesInformation(index);
-		var muscle_values = GetMuscleValue(index, rotation);
-		//Muscle値から回転値復元
-		muscle_values = new Vector3(muscle_values.x * axes_information.sign.x, muscle_values.y * axes_information.sign.y, muscle_values.z * axes_information.sign.z);
-		Quaternion quaternion = Quaternion.Euler(muscle_values);
-		quaternion = new Quaternion(quaternion.x * axes_information.sign.x, quaternion.y * axes_information.sign.y, quaternion.z * axes_information.sign.z, quaternion.w * axes_information.sign.w);
-		Quaternion result = axes_information.pre_quaternion * quaternion * Quaternion.Inverse(axes_information.post_quaternion);
-		return result;
-	}
-	
-	/// <summary>
 	/// Point値の取得
 	/// </summary>
 	/// <returns>(現在の姿勢の)Point値配列</returns>
@@ -718,7 +700,7 @@ public class AnimatorUtility
 						Transform parent_transform = animator_utility.GetTransformFromBoneIndex(parent_bone_index);
 						if (null != parent_transform) {
 							//親のMuscle値に依る回転値を求め、それからの相対値を求める
-							Quaternion parent_rotation = animator_utility.GetMuscleNormalize(parent_bone_index, parent_transform.localRotation);
+							Quaternion parent_rotation = parent_transform.localRotation;
 							parent_rotation = parent_transform.parent.rotation * parent_rotation;
 							rotation = Quaternion.Inverse(parent_rotation) * rotation;
 						}
