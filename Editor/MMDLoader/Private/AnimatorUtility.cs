@@ -248,14 +248,15 @@ public class AnimatorUtility
 		Dictionary<HumanBodyMuscles, float> result = new Dictionary<HumanBodyMuscles, float>();
 		//Muscle値算出
 		AxesInformation axes_information = GetAxesInformation(index);
-		Vector3 rotation_avatar = (Quaternion.Inverse(axes_information.pre_quaternion) * rotation * axes_information.post_quaternion).eulerAngles;
+		Quaternion quaternion_avatar = Quaternion.Inverse(axes_information.pre_quaternion) * rotation * axes_information.post_quaternion;
+		quaternion_avatar = new Quaternion(quaternion_avatar.x * axes_information.sign.x, quaternion_avatar.y * axes_information.sign.y, quaternion_avatar.z * axes_information.sign.z, quaternion_avatar.w * axes_information.sign.w);
+		Vector3 euler_avatar = quaternion_avatar.eulerAngles;
 		//軸操作
 		for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
 			HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)index, axis_index);
 			if ((uint)muscle_index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) {
-				float value = rotation_avatar[axis_index];
+				float value = euler_avatar[axis_index];
 				value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 360.0f: value)); //範囲を-180.0f～180.0fに収める
-				value *= axes_information.sign[axis_index];
 				if (value < 0) {
 					//標準ポーズより小さいなら
 					value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg); 
