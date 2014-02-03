@@ -268,16 +268,6 @@ public class AnimatorUtility
 				//標準ポーズと同じ もしくは 未対応軸なら
 				value = 0.0f;
 			}
-			//背骨・胸ボーンは下半身と分け合うので2倍化
-			switch (index) {
-			case HumanBodyFullBones.Spine: goto case HumanBodyFullBones.Chest;
-			case HumanBodyFullBones.Chest:
-				value *= 2.0f;
-				break;
-			default:
-				//empty.
-				break;
-			}
 			value = Mathf.Clamp(value, -1.0f, 1.0f);
 			result[axis_index] = value;
 		}
