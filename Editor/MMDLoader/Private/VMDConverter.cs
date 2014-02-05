@@ -542,10 +542,17 @@ namespace MMD
 			if (null == animator) {
 				AnimationUtility.SetAnimationType(clip, ModelImporterAnimationType.Legacy);
 			} else {
+				//Hipsボーンの初期位置記憶
+				Vector3 model_hips_position = Vector3.zero;
+				Quaternion model_hips_rotation = Quaternion.identity;
 				//初回更新関数
 				System.Action<Animation> Start = animation=>{
 					MMDEngine mmd_engine = animation.GetComponent<MMDEngine>();
 					if (null != mmd_engine) {
+						//Hipsボーンの初期位置記憶
+						Transform model_hips_transform = animation.transform.Find("Model/Root");
+						model_hips_position = model_hips_transform.position;
+						model_hips_rotation = model_hips_transform.rotation;
 						//IKオンオフ
 						foreach (CCDIKSolver ik_script in mmd_engine.ik_list) {
 							switch (ik_script.name) {
@@ -567,11 +574,46 @@ namespace MMD
 				};
 				//更新関数
 				System.Func<Animation, IEnumerable<string>, AnimatorUtility.HumanBodyFullBones[]> Update = (animation, paths)=>{
+					//Hipsボーンの初期位置復元
+					Transform model_hips_transform = animation.transform.Find("Model/Root");
+					model_hips_transform.position = model_hips_position;
+					model_hips_transform.rotation = model_hips_rotation;
+					//サンプリング
 					animation.Sample();
+					//MMDのIK適応
 					MMDEngine mmd_engine = animation.GetComponent<MMDEngine>();
 					if (null != mmd_engine) {
 						mmd_engine.LateUpdate();
 					}
+					//特定の名称を持ったTransformを取得する
+					System.Func<string, Transform, Transform> SearchTransform = null;
+					SearchTransform = (n,t)=>{
+						foreach (Transform i in t) {
+							if (i.name == n) {
+								return i;
+							} else {
+								Transform r = SearchTransform(n,i);
+								if (null != r) {
+									return r;
+								}
+							}
+						}
+						return null;
+					};
+					//下半身ボーンの情報をHipsボーンに伝達
+					Transform model_lower_body_transform = SearchTransform("下半身", model_hips_transform);
+					Transform temp_transform = (new GameObject()).transform;
+					for (int i = model_hips_transform.childCount; 0 < i; --i) {
+						model_hips_transform.GetChild(i-1).parent = temp_transform;
+					}
+					if (null != model_lower_body_transform) {
+						model_hips_transform.position = model_lower_body_transform.position;
+						model_hips_transform.rotation = model_lower_body_transform.rotation;
+					}
+					for (int i = temp_transform.childCount; 0 < i; --i) {
+						temp_transform.GetChild(i-1).parent = model_hips_transform;
+					}
+					GameObject.DestroyImmediate(temp_transform.gameObject);
 					//"足ＩＫ"関連のキーフレームが有れば足回りの追加キーフレーム打ちを申請する
 					var result = new List<AnimatorUtility.HumanBodyFullBones>();
 					var bone_names = paths.Where(x=>x.Contains("ＩＫ")) //パスにＩＫが含まれている対象に絞る
@@ -583,6 +625,11 @@ namespace MMD
 											.Select(x=>x.name); //ゲームオブジェクト名変換
 					foreach (var bone_name in bone_names) {
 						switch (bone_name) {
+						case "下半身":
+							result.AddRange(new []{
+								AnimatorUtility.HumanBodyFullBones.Hips,
+							});
+							break;
 						case "右足ＩＫ":
 							result.AddRange(new []{
 								AnimatorUtility.HumanBodyFullBones.RightUpperLeg,

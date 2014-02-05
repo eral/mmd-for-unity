@@ -294,9 +294,8 @@ public class AnimatorUtility
 			};
 
 			{ //Root
-				var hips_transform = animator_.GetBoneTransform(HumanBodyBones.Hips);
-				var chest_transform = animator_.GetBoneTransform(HumanBodyBones.Chest);
-				SetResult(HumanBodyPoints.RootPositionX, hips_transform.position, chest_transform.rotation);
+				var transform = animator_.GetBoneTransform(HumanBodyBones.Hips);
+				SetResult(HumanBodyPoints.RootPositionX, transform.position, transform.rotation);
 			}
 			{ //LeftFoot
 				var transform = animator_.GetBoneTransform(HumanBodyBones.LeftFoot);
