@@ -210,11 +210,9 @@ public class AvatarSettingScript
 		
 		//顔系
 		//ヒューマノイドボーンは"ヒップ→背骨"のボーンを要求するが、MMDは"上半身→下半身"と接続方向が逆なのでこれらを割り当てる事は出来ない
-		if (HasBone("腰")) {
-			bone_name.Add(CreateHint("Hips",	"腰"		));	//ヒップ◆△
-		} else {
-			bone_name.Add(CreateHint("Hips",	"センター"	));	//ヒップ◆
-		}
+		//下半身と同座標に かつ 上半身の親として"Root"を生成しているのでそれを利用する
+		//一部には腰ボーンを持つモデルが存在してそれをヒップに割り当てる事も可能だが、モーション変換時に腰ボーンと下半身ボーンを統合したアニメーションを生成する為、Rootボーンに一任する
+		bone_name.Add(CreateHint("Hips",	"Root"	));	//ヒップ◆
 		bone_name.Add(CreateHintMinMax("Spine",	"上半身"
 										, new Vector3(HumanTrait.GetMuscleDefaultMin(HumanTrait.MuscleFromBone((int)HumanBodyBones.Spine, 0))
 													, HumanTrait.GetMuscleDefaultMin(HumanTrait.MuscleFromBone((int)HumanBodyBones.Spine, 1))
@@ -309,29 +307,23 @@ public class AvatarSettingScript
 	/// <returns>スケルトンボーン</returns>
 	SkeletonBone[] CreateSkeletonBone()
 	{
-		IEnumerable<GameObject> bones_enumerator = bones_;
+		IEnumerable<Transform> bones_enumerator = bones_.Select(x=>x.transform);
 
 		//Hipsボーンの親ボーン迄SkeletonBoneに入れる必要が有るので、確認と追加
-		string hips_bone_name = ((HasBone("腰"))? "腰": "センター");
-		Transform hips_parent_bone = bones_.Where(x=>x.name == hips_bone_name).Select(x=>x.transform.parent).FirstOrDefault();
-		if (null != hips_parent_bone) {
-			//Hipsボーンの親ボーンが有るなら
-			//Hipsボーンの親ボーンがbones_に含まれているか確認する
-			if (!HasBone(hips_parent_bone.name)) {
-				//Hipsボーンの親ボーンがbones_に無いなら
-				//追加(Hipsボーン依りも前に追加しないといけないので注意)
-				bones_enumerator = Enumerable.Repeat(hips_parent_bone.gameObject, 1)
-											.Concat(bones_enumerator);
-			}
+		{
+			Transform model_root_transform = root_game_object_.transform.FindChild("Model");
+			Transform model_hips_transform = model_root_transform.FindChild("Root");
+
+			//追加(親から順番に為っていないとエラーと為るのでボーンの前に挿入)
+			bones_enumerator = (new []{model_root_transform, model_hips_transform}).Concat(bones_enumerator);
 		}
 
 		var result = bones_enumerator.Select(x=>{
 												SkeletonBone skeleton_bone = new SkeletonBone();
 												skeleton_bone.name = x.name;
-												Transform transform = x.transform;
-												skeleton_bone.position = transform.localPosition;
-												skeleton_bone.rotation = transform.localRotation;
-												skeleton_bone.scale = transform.localScale;
+												skeleton_bone.position = x.localPosition;
+												skeleton_bone.rotation = x.localRotation;
+												skeleton_bone.scale = x.localScale;
 												return skeleton_bone;
 											});
 		return result.ToArray();

@@ -985,7 +985,16 @@ namespace MMD
 			//モデルルートを生成してルートの子供に付ける
 			Transform model_root_transform = (new GameObject("Model")).transform;
 			model_root_transform.parent = root_game_object_.transform;
-
+			
+			//HumanMecanimの対応の為に、下半身ボーンの位置にボーンを新設する
+			Transform model_hips_transform = (new GameObject("Root")).transform;
+			foreach (var hips_bone in bones.Where(x=>x.name=="下半身")) {
+				model_hips_transform.position = hips_bone.transform.position;
+				break;
+			}
+			model_hips_transform.parent = model_root_transform;
+			model_root_transform = model_hips_transform;
+			
 			for (int i = 0, i_max = format_.bone_list.bone.Length; i < i_max; ++i) {
 				uint parent_bone_index = format_.bone_list.bone[i].parent_bone_index;
 				if (parent_bone_index < (uint)bones.Length) {
@@ -1470,7 +1479,7 @@ namespace MMD
 			mesh_root_transform.parent = root_game_object_.transform;
 
 			//モデルルート取得
-			Transform model_root_transform = root_game_object_.transform.FindChild("Model");
+			Transform model_root_transform = root_game_object_.transform.Find("Model/Root");
 			//ボーン共通データ
 			Matrix4x4[] bindposes = bones.Select(x=>x.transform.worldToLocalMatrix).ToArray();
 			Transform[] bones_transform = bones.Select(x=>x.transform).ToArray();
