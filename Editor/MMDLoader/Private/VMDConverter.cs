@@ -603,60 +603,69 @@ namespace MMD
 					//下半身ボーンの情報をHipsボーンに伝達
 					Transform model_lower_body_transform = SearchTransform("下半身", model_hips_transform);
 					Transform temp_transform = (new GameObject()).transform;
-					for (int i = model_hips_transform.childCount; 0 < i; --i) {
-						model_hips_transform.GetChild(i-1).parent = temp_transform;
-					}
 					if (null != model_lower_body_transform) {
+						for (int i = model_hips_transform.childCount; 0 < i; --i) {
+							model_hips_transform.GetChild(i-1).parent = temp_transform;
+						}
 						model_hips_transform.position = model_lower_body_transform.position;
 						model_hips_transform.rotation = model_lower_body_transform.rotation;
-					}
-					for (int i = temp_transform.childCount; 0 < i; --i) {
-						temp_transform.GetChild(i-1).parent = model_hips_transform;
+						for (int i = temp_transform.childCount; 0 < i; --i) {
+							temp_transform.GetChild(i-1).parent = model_hips_transform;
+						}
 					}
 					GameObject.DestroyImmediate(temp_transform.gameObject);
-					//"足ＩＫ"関連のキーフレームが有れば足回りの追加キーフレーム打ちを申請する
+					//"下半身"のキーフレームが有ればHipsの追加キーフレーム打ちを申請する
 					var result = new List<AnimatorUtility.HumanBodyFullBones>();
-					var bone_names = paths.Where(x=>x.Contains("ＩＫ")) //パスにＩＫが含まれている対象に絞る
-											.Select(x=>animation.transform.Find(x)) //トランスフォーム変換
-											.Where(x=>null != x) //失敗なら除外
-											.Select(x=>x.GetComponent<CCDIKSolver>()) //CCDIKSolverコンポーネント変換
-											.Where(x=>null != x) //失敗なら除外
-											.Where(x=>x.enabled) //無効化されていたら除外
-											.Select(x=>x.name); //ゲームオブジェクト名変換
-					foreach (var bone_name in bone_names) {
-						switch (bone_name) {
-						case "下半身":
+					{
+						var has_lower_body_bone = paths.Where(x=>x.Contains("下半身")) //パスに下半身が含まれている対象に絞る
+														.Select(x=>animation.transform.Find(x)) //トランスフォーム変換
+														.Where(x=>null != x) //失敗なら除外
+														.Any(x=>"下半身" == x.name); //ゲームオブジェクト名が"下半身"なら
+						if (has_lower_body_bone) {
 							result.AddRange(new []{
 								AnimatorUtility.HumanBodyFullBones.Hips,
 							});
-							break;
-						case "右足ＩＫ":
-							result.AddRange(new []{
-								AnimatorUtility.HumanBodyFullBones.RightUpperLeg,
-								AnimatorUtility.HumanBodyFullBones.RightLowerLeg,
-								AnimatorUtility.HumanBodyFullBones.RightFoot,
-							});
-							break;
-						case "右つま先ＩＫ":
-							result.AddRange(new []{
-								AnimatorUtility.HumanBodyFullBones.RightToes,
-							});
-							break;
-						case "左足ＩＫ":
-							result.AddRange(new []{
-								AnimatorUtility.HumanBodyFullBones.LeftUpperLeg,
-								AnimatorUtility.HumanBodyFullBones.LeftLowerLeg,
-								AnimatorUtility.HumanBodyFullBones.LeftFoot,
-							});
-							break;
-						case "左つま先ＩＫ":
-							result.AddRange(new []{
-								AnimatorUtility.HumanBodyFullBones.LeftToes,
-							});
-							break;
-						default:
-							//empty.
-							break;
+						}
+					}
+					//"足ＩＫ"関連のキーフレームが有れば足回りの追加キーフレーム打ちを申請する
+					{
+						var bone_names = paths.Where(x=>x.Contains("ＩＫ")) //パスにＩＫが含まれている対象に絞る
+												.Select(x=>animation.transform.Find(x)) //トランスフォーム変換
+												.Where(x=>null != x) //失敗なら除外
+												.Select(x=>x.GetComponent<CCDIKSolver>()) //CCDIKSolverコンポーネント変換
+												.Where(x=>null != x) //失敗なら除外
+												.Where(x=>x.enabled) //無効化されていたら除外
+												.Select(x=>x.name); //ゲームオブジェクト名変換
+						foreach (var bone_name in bone_names) {
+							switch (bone_name) {
+							case "右足ＩＫ":
+								result.AddRange(new []{
+									AnimatorUtility.HumanBodyFullBones.RightUpperLeg,
+									AnimatorUtility.HumanBodyFullBones.RightLowerLeg,
+									AnimatorUtility.HumanBodyFullBones.RightFoot,
+								});
+								break;
+							case "右つま先ＩＫ":
+								result.AddRange(new []{
+									AnimatorUtility.HumanBodyFullBones.RightToes,
+								});
+								break;
+							case "左足ＩＫ":
+								result.AddRange(new []{
+									AnimatorUtility.HumanBodyFullBones.LeftUpperLeg,
+									AnimatorUtility.HumanBodyFullBones.LeftLowerLeg,
+									AnimatorUtility.HumanBodyFullBones.LeftFoot,
+								});
+								break;
+							case "左つま先ＩＫ":
+								result.AddRange(new []{
+									AnimatorUtility.HumanBodyFullBones.LeftToes,
+								});
+								break;
+							default:
+								//empty.
+								break;
+							}
 						}
 					}
 					return result.ToArray();
