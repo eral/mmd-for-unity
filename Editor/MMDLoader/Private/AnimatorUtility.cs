@@ -209,21 +209,38 @@ public class AnimatorUtility
 	/// <param name="muscles_value_">Muscle値配列</param>
 	public void SetMuscleValue(float[] muscles_value_) {
 		if (null != animator_.avatar) {
+			Transform hips_transform = GetTransformFromBoneIndex(HumanBodyFullBones.Hips);
+			Vector3 hips_position = hips_transform.position;
+			Vector3 mass_center = Vector3.zero; //重心
+			float mass_all = 0.0f; //総質量
 			//ボーン操作
 			for (HumanBodyFullBones bone_index = (HumanBodyFullBones)0, bone_index_max = (HumanBodyFullBones)System.Enum.GetValues(typeof(HumanBodyFullBones)).Length; bone_index < bone_index_max; ++bone_index) {
 				Transform bone_transform = GetTransformFromBoneIndex(bone_index);
 				if (null != bone_transform) {
 					//ボーンが有るなら
-					//Muscle値算出
-					Vector3 muscle = Vector3.zero;
-					for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
-						HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
-						if ((uint)muscle_index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) {
-							muscle[axis_index] = muscles_value_[(int)muscle_index];
+					{ //Muscle値算出
+						Vector3 muscle = Vector3.zero;
+						for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
+							HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
+							if ((uint)muscle_index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) {
+								muscle[axis_index] = muscles_value_[(int)muscle_index];
+							}
 						}
+						Quaternion rotation = GetRotationFromMuscleValue(bone_index, muscle);
+						bone_transform.localRotation = rotation;
 					}
-					Quaternion rotation = GetRotationFromMuscleValue(bone_index, muscle);
-					bone_transform.localRotation = rotation;
+					{ //重心算出
+						float mass = GetMass(bone_index);
+						Vector3 bone_mass = (bone_transform.position - hips_position) * mass;
+						mass_center += bone_mass;
+						mass_all += mass;
+					}
+				}
+			}
+			//腰ボーンの位置設定
+			{
+				if (null != hips_transform) {
+					hips_transform.localPosition = -mass_center / mass_all;
 				}
 			}
 		}
@@ -538,6 +555,26 @@ public class AnimatorUtility
 		}
 		if ((uint)index < (uint)bone_axes_information_.Length) {
 			result = bone_axes_information_[(int)index];
+		} else {
+			throw new System.ArgumentOutOfRangeException();
+		}
+		return result;
+	}
+	
+	/// <summary>
+	/// ボーンインデックスから質量を取得
+	/// </summary>
+	/// <returns>ボーン質量</returns>
+	/// <param name="index">ボーンインデックス</param>
+	private float GetMass(HumanBodyFullBones index) {
+		float result = 0.0f;
+		if (null == bone_mass_) {
+			bone_mass_ = CreateBoneMass();
+		}
+		if ((uint)index < (uint)bone_mass_.Length) {
+			result = bone_mass_[(int)index]; //基本的にHumanBodyBones迄しか無い
+		} else if ((uint)index < (uint)System.Enum.GetValues(typeof(HumanBodyFullBones)).Length) {
+			//empty.
 		} else {
 			throw new System.ArgumentOutOfRangeException();
 		}
@@ -1179,6 +1216,23 @@ public class AnimatorUtility
 	}
 	
 	/// <summary>
+	/// ボーンの質量を取得する
+	/// </summary>
+	/// <returns>ボーンの質量配列(AxesInformation[HumanBodyBones])</returns>
+	private float[] CreateBoneMass() {
+		SerializedObject so_avatar = new SerializedObject(animator_.avatar);
+		SerializedProperty sp_mass_array = so_avatar.FindProperty("m_Avatar.m_Human.data.m_HumanBoneMass");
+		
+		float[] result = Enumerable.Repeat(0.0f, sp_mass_array.arraySize).ToArray();
+		for (int i = 0, i_max = result.Length; i < i_max; ++i) {
+			var sp_mass = sp_mass_array.GetArrayElementAtIndex(i);
+			float mass = sp_mass.floatValue;
+			result[i] = mass;
+		}
+		return result;
+	}
+	
+	/// <summary>
 	/// Tポーズのトランスフォームを取得する
 	/// </summary>
 	/// <returns>Tポーズのボーンのトランスフォーム配列(Quaternion[HumanBodyFullBones])</returns>
@@ -1255,6 +1309,7 @@ public class AnimatorUtility
 			return result;
 		}}
 	}
+	float[] bone_mass_ = null;
 	PortableTransform[] human_transform_for_t_pose_ = null;
 	
 	private static	MethodInfo	AvatarUtility_SetHumanPose_;	//UnityEditor.dll/UnityEditor.AvatarUtility/SetHumanPoseのリフレクションキャッシュ
