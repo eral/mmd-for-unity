@@ -282,14 +282,14 @@ public class AnimatorUtility
 		//軸操作
 		for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
 			float value = euler_avatar[axis_index];
-			value = ((value < -180.0f)? value + 360.0f: ((180.0f < value)? value - 360.0f: value)); //範囲を-180.0f～180.0fに収める
-			value *= axes_information.sign[axis_index];
 			if ((value < 0) && (0 != axes_information.limit.min[axis_index])) {
 				//標準ポーズより小さいなら
-				value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg); 
+				value = ((value < -180.0f)? value + 360.0f: value); //範囲を-180.0f～180.0fに収める
+				value = value / (axes_information.limit.min[axis_index] * -Mathf.Rad2Deg * axes_information.sign[axis_index]); 
 			} else if ((0 < value) && (0.0f != axes_information.limit.max[axis_index])) {
 				//標準ポーズより大きいなら
-				value = value / (axes_information.limit.max[axis_index] * Mathf.Rad2Deg);
+				value = ((180.0f < value)? value - 360.0f: value); //範囲を-180.0f～180.0fに収める
+				value = value / (axes_information.limit.max[axis_index] * Mathf.Rad2Deg * axes_information.sign[axis_index]);
 			} else {
 				//標準ポーズと同じ もしくは 未対応軸なら
 				value = 0.0f;
@@ -309,17 +309,14 @@ public class AnimatorUtility
 	private Quaternion GetRotationFromMuscleValue(HumanBodyFullBones index, Vector3 muscle) {
 		//Muscle値算出
 		AxesInformation axes_information = GetAxesInformation(index);
-		Vector3 euler = new Vector3(muscle.x * axes_information.sign.x
-									, muscle.y * axes_information.sign.y
-									, muscle.z * axes_information.sign.z
-									);
+		Vector3 euler = Vector3.zero;
 		for (int i = 0, i_max = 3; i < i_max; ++i) {
-			if (euler[i] < 0) {
+			if (muscle[i] < 0) {
 				//負数なら
-				euler[i] *= axes_information.limit.min[i] * -Mathf.Rad2Deg;
-			} else if (0 < euler[i]) {
+				euler[i] = muscle[i] * axes_information.limit.min[i] * -Mathf.Rad2Deg * axes_information.sign[i];
+			} else if (0 < muscle[i]) {
 				//正数なら
-				euler[i] *= axes_information.limit.max[i] * Mathf.Rad2Deg;
+				euler[i] = muscle[i] * axes_information.limit.max[i] * Mathf.Rad2Deg * axes_information.sign[i];
 			}
 		}
 		Quaternion rotation = Quaternion.Euler(euler);
