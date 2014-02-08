@@ -60,6 +60,7 @@ public class MuscleMarionette : EditorWindow {
 			muscles_first_value_ = muscles_value_.ToArray();
 		}
 		GUI.enabled = (null != avatar);
+		is_dirty = OnGUIforPoseApplyFunction() || is_dirty;
 		is_dirty = OnGUIforPoseButton() || is_dirty;
 		is_dirty = OnGUIforAnimationButton() || is_dirty;
 		is_dirty = OnGUIforGroup() || is_dirty;
@@ -95,6 +96,22 @@ public class MuscleMarionette : EditorWindow {
 	}
 	
 	/// <summary>
+	/// ポーズ設定関数の為のGUI描画
+	/// </summary>
+	/// <returns>更新が有ったか(true:更新有り, false:未更新)</returns>
+	private bool OnGUIforPoseApplyFunction() {
+		bool is_update = false;
+		var new_pose_apply_function_ = (PoseApplyFunction)GUILayout.Toolbar((int)pose_apply_function_, System.Enum.GetNames(typeof(PoseApplyFunction)));
+		if (pose_apply_function_ != new_pose_apply_function_) {
+			//Animatorが更新されたなら
+			pose_apply_function_ = new_pose_apply_function_;
+
+			is_update = true;
+		}
+		return is_update;
+	}
+	
+	/// <summary>
 	/// Animatorの為のGUI描画
 	/// </summary>
 	/// <returns>更新が有ったか(true:更新有り, false:未更新)</returns>
@@ -113,7 +130,7 @@ public class MuscleMarionette : EditorWindow {
 			}
 			//値リセット
 			ResetValue();
-
+			
 			is_update = true;
 		}
 		return is_update;
@@ -473,7 +490,16 @@ public class MuscleMarionette : EditorWindow {
 	private void ApplyMusclesValue() {
 		if ((null != animator_) && (null != animator_.avatar)) {
 			AnimatorUtility animator_utility = new AnimatorUtility(animator_);
-			animator_utility.SetMuscleValue(muscles_value_);
+			switch (pose_apply_function_) {
+			case PoseApplyFunction.Embedded:
+				animator_utility.SetMuscleValueWithUnityEditorDll(muscles_value_);
+				break;
+			case PoseApplyFunction.FullScratch:
+				animator_utility.SetMuscleValue(muscles_value_);
+				break;
+			default:
+				throw new System.IndexOutOfRangeException();
+			}
 			SceneView.RepaintAll();
 		}
 	}
@@ -555,6 +581,14 @@ public class MuscleMarionette : EditorWindow {
 			//付与親等を更新
 			mmd_engine.LateUpdate();
 		}
+	}
+	
+	/// <summary>
+	/// グループ分け
+	/// </summary>
+	enum PoseApplyFunction {
+		Embedded,
+		FullScratch,
 	}
 	
 	/// <summary>
@@ -699,6 +733,7 @@ public class MuscleMarionette : EditorWindow {
 	}
 
 	private Animator animator_ = null;
+	private PoseApplyFunction pose_apply_function_ = PoseApplyFunction.Embedded;
 	private float[] group_value_ = null;
 	private float[] muscles_value_ = null;
 	private float[] muscles_first_value_ = null;

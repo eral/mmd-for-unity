@@ -317,7 +317,7 @@ public class AnimatorUtility
 			if (euler[i] < 0) {
 				//負数なら
 				euler[i] *= axes_information.limit.min[i] * -Mathf.Rad2Deg;
-			} else {
+			} else if (0 < euler[i]) {
 				//正数なら
 				euler[i] *= axes_information.limit.max[i] * Mathf.Rad2Deg;
 			}
