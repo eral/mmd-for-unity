@@ -174,6 +174,7 @@ public class MuscleMarionette : EditorWindow {
 				is_update = true;
 			}
 			if (GUILayout.Button("Report", EditorStyles.miniButton)) {
+#if true
 				string log = "";
 				AnimatorUtility animator_utility = new AnimatorUtility(animator_);
 				for (int i = 0, i_max = System.Enum.GetValues(typeof(AnimatorUtility.HumanBodyFullBones)).Length; i < i_max; ++i) {
@@ -191,6 +192,56 @@ public class MuscleMarionette : EditorWindow {
 				Debug.Log(log);
 				
 				is_update = true;
+#elif false
+				string log = "";
+				AnimatorUtility animator_utility = new AnimatorUtility(animator_);
+				var hips_transform = animator_utility.GetTransformFromBoneIndex(AnimatorUtility.HumanBodyFullBones.Hips);
+				var spine_transform = animator_utility.GetTransformFromBoneIndex(AnimatorUtility.HumanBodyFullBones.Spine);
+				var chest_transform = animator_utility.GetTransformFromBoneIndex(AnimatorUtility.HumanBodyFullBones.Chest);
+				
+				float[] muscles_value = animator_utility.GetMuscleValue();
+				for (float value = -1.0f, value_max = 1.0f; value <= value_max; value += 0.01f) {
+					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.SpineFrontBack] = value;
+//					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.SpineLeftRight] = value;
+//					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.SpineTwistLeftRight] = value;
+//					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.ChestFrontBack] = value;
+//					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.ChestLeftRight] = value;
+//					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.ChestTwistLeftRight] = value;
+					animator_utility.SetMuscleValue(muscles_value);
+
+					log += value.ToString("#.##") + "\t";
+					log += hips_transform.localEulerAngles.x + "\t";
+					log += spine_transform.localEulerAngles.x + "\t";
+					log += chest_transform.localEulerAngles.x + "\t";
+					log += "\n";
+				}
+				
+				Debug.Log(log);
+#else
+				string log = "";
+				AnimatorUtility animator_utility = new AnimatorUtility(animator_);
+				var hips_transform = animator_utility.GetTransformFromBoneIndex(AnimatorUtility.HumanBodyFullBones.Hips);
+				
+				float[] muscles_value = animator_utility.GetMuscleValue();
+				for (float value = -1.0f, value_max = 1.0f; value <= value_max; value += 0.01f) {
+					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.SpineFrontBack] = value;
+//					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.SpineLeftRight] = value;
+//					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.SpineTwistLeftRight] = value;
+//					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.ChestFrontBack] = value;
+//					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.ChestLeftRight] = value;
+//					muscles_value[(int)AnimatorUtility.HumanBodyMuscles.ChestTwistLeftRight] = value;
+					animator_utility.SetMuscleValue(muscles_value);
+
+					log += value.ToString("#.##") + "\t";
+					log += hips_transform.localRotation.x + "\t";
+					log += hips_transform.localRotation.y + "\t";
+					log += hips_transform.localRotation.z + "\t";
+					log += hips_transform.localRotation.w + "\t";
+					log += "\n";
+				}
+				
+				Debug.Log(log);
+#endif
 			}
 		}
 		EditorGUILayout.EndHorizontal();
