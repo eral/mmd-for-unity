@@ -209,48 +209,39 @@ public class AnimatorUtility
 	/// <param name="muscles_value_">Muscle値配列</param>
 	public void SetMuscleValue(float[] muscles_value_) {
 		if (null != animator_.avatar) {
-			//回転値算出(Muscleインデックス順に回転を反映させる)
-			Quaternion[] bone_rotation = Enumerable.Range(0, System.Enum.GetValues(typeof(HumanBodyBones)).Length)
-													.Select(x=>GetRotationDefaultPose((HumanBodyFullBones)x))
-													.ToArray();
-			for (HumanBodyMuscles muscle_index = (HumanBodyMuscles)0, muscle_index_max = (HumanBodyMuscles)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length; muscle_index < muscle_index_max; ++muscle_index) {
-				HumanBodyFullBones bone_index = (HumanBodyFullBones)HumanTrait.BoneFromMuscle((int)muscle_index);
-				if ((uint)bone_index < (uint)bone_rotation.Length) {
-					//HumanBodyBones範囲内なら
-					int axis_index = AxesFromMuscle(muscle_index);
-					if ((uint)axis_index < 3) {
-						//対象軸が有るなら
-						Quaternion rotation = GetRotationFromMuscleValue(muscle_index, muscles_value_[(int)muscle_index]);
-						bone_rotation[(int)bone_index] *= rotation;
-					}
-				}
-			}
+			Transform hips_transform = GetTransformFromBoneIndex(HumanBodyFullBones.Hips);
+			Vector3 hips_position = hips_transform.position;
+			Vector3 mass_center = Vector3.zero; //重心
+			float mass_all = 0.0f; //総質量
 			//ボーン操作
-			for (HumanBodyBones bone_index = (HumanBodyBones)0, bone_index_max = (HumanBodyBones)System.Enum.GetValues(typeof(HumanBodyBones)).Length; bone_index < bone_index_max; ++bone_index) {
-				Transform bone_transform = GetTransformFromBoneIndex((HumanBodyFullBones)bone_index);
+			for (HumanBodyFullBones bone_index = (HumanBodyFullBones)0, bone_index_max = (HumanBodyFullBones)System.Enum.GetValues(typeof(HumanBodyFullBones)).Length; bone_index < bone_index_max; ++bone_index) {
+				Transform bone_transform = GetTransformFromBoneIndex(bone_index);
 				if (null != bone_transform) {
 					//ボーンが有るなら
-					bone_transform.localRotation = bone_rotation[(int)bone_index];
-				}
-			}
-			//腰ボーンの位置設定
-			Transform hips_transform = GetTransformFromBoneIndex(HumanBodyFullBones.Hips);
-			if (null != hips_transform) {
-				Vector3 hips_position = hips_transform.position;
-				Vector3 mass_center = Vector3.zero; //重心
-				float mass_all = 0.0f; //総質量
-				for (HumanBodyFullBones bone_index = (HumanBodyFullBones)0, bone_index_max = (HumanBodyFullBones)System.Enum.GetValues(typeof(HumanBodyFullBones)).Length; bone_index < bone_index_max; ++bone_index) {
-					Transform bone_transform = GetTransformFromBoneIndex(bone_index);
-					if (null != bone_transform) {
-						//ボーンが有るなら
-						//重心算出
+					{ //Muscle値算出
+						Vector3 muscle = Vector3.zero;
+						for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
+							HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
+							if ((uint)muscle_index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) {
+								muscle[axis_index] = muscles_value_[(int)muscle_index];
+							}
+						}
+						Quaternion rotation = GetRotationFromMuscleValue(bone_index, muscle);
+						bone_transform.localRotation = rotation;
+					}
+					{ //重心算出
 						float mass = GetMass(bone_index);
 						Vector3 bone_mass = (bone_transform.position - hips_position) * mass;
 						mass_center += bone_mass;
 						mass_all += mass;
 					}
 				}
-				hips_transform.localPosition = -mass_center / mass_all;
+			}
+			//腰ボーンの位置設定
+			{
+				if (null != hips_transform) {
+					hips_transform.localPosition = -mass_center / mass_all;
+				}
 			}
 		}
 	}
@@ -345,35 +336,20 @@ public class AnimatorUtility
 				euler[i] = muscle[i] * axes_information.limit.max[i] * Mathf.Rad2Deg * axes_information.sign[i];
 			}
 		}
-		Quaternion rotation = Quaternion.Euler(euler);
-		Quaternion result = axes_information.pre_quaternion * rotation * Quaternion.Inverse(axes_information.post_quaternion);
-		return result;
-	}
-	
-	/// <summary>
-	/// Muscle値から回転値の取得
-	/// </summary>
-	/// <returns>回転値</returns>
-	/// <param name="index">Muscleインデックス</param>
-	/// <param name="rotation">Muscle値</param>
-	private Quaternion GetRotationFromMuscleValue(HumanBodyMuscles index, float muscle) {
-		Quaternion result = Quaternion.identity;
-		//Muscle値算出
-		int axes_index = AxesFromMuscle(index);
-		if ((uint)axes_index < 3) {
-			HumanBodyFullBones bone_index = (HumanBodyFullBones)HumanTrait.BoneFromMuscle((int)index);
-			AxesInformation axes_information = GetAxesInformation(bone_index);
-			Vector3 euler = Vector3.zero;
-			if (muscle < 0) {
-				//負数なら
-				euler[axes_index] = muscle * axes_information.limit.min[axes_index] * -Mathf.Rad2Deg * axes_information.sign[axes_index];
-			} else if (0 < muscle) {
-				//正数なら
-				euler[axes_index] = muscle * axes_information.limit.max[axes_index] * Mathf.Rad2Deg * axes_information.sign[axes_index];
-			}
-			Quaternion rotation = Quaternion.Euler(euler);
-			result = axes_information.pre_quaternion * rotation * Quaternion.Inverse(axes_information.post_quaternion);
+		var rotations = Enumerable.Range(0, 3) //軸走査用インデックス
+									.Select(x=>new {index = HumanTrait.MuscleFromBone((int)index, x), value = euler[x], axes = x}) //MuscleインデックスとMuscle値、軸インデックスのパック
+									.Where(x=>(uint)x.index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) //Muscleインデックスの特定に失敗したら除外
+									.OrderBy(x=>x.index) //Muscleインデックス順に並べる
+									.Select(x=>{ //各軸単位でクォータニオン化
+										Vector3 r = Vector3.zero;
+										r[x.axes] = x.value;
+										return Quaternion.Euler(r);
+									});
+		Quaternion result = axes_information.pre_quaternion;
+		foreach (var rotation in rotations) {
+			result *= rotation;
 		}
+		result *= Quaternion.Inverse(axes_information.post_quaternion);
 		return result;
 	}
 	
