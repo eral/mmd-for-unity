@@ -208,6 +208,32 @@ public class AnimatorUtility
 	/// </summary>
 	/// <param name="muscles_value_">Muscle値配列</param>
 	public void SetMuscleValue(float[] muscles_value_) {
+		if (null != animator_.avatar) {
+			//ボーン操作
+			for (HumanBodyFullBones bone_index = (HumanBodyFullBones)0, bone_index_max = (HumanBodyFullBones)System.Enum.GetValues(typeof(HumanBodyFullBones)).Length; bone_index < bone_index_max; ++bone_index) {
+				Transform bone_transform = GetTransformFromBoneIndex(bone_index);
+				if (null != bone_transform) {
+					//ボーンが有るなら
+					//Muscle値算出
+					Vector3 muscle = Vector3.zero;
+					for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
+						HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
+						if ((uint)muscle_index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) {
+							muscle[axis_index] = muscles_value_[(int)muscle_index];
+						}
+					}
+					Quaternion rotation = GetRotationFromMuscleValue(bone_index, muscle);
+					bone_transform.localRotation = rotation;
+				}
+			}
+		}
+	}
+	
+	/// <summary>
+	/// UnityEditor.dllを用いたMuscle値の設定
+	/// </summary>
+	/// <param name="muscles_value_">Muscle値配列</param>
+	public void SetMuscleValueWithUnityEditorDll(float[] muscles_value_) {
 		AvatarUtility_SetHumanPose_.Invoke(null, new object[]{animator_, muscles_value_});
 	}
 	
@@ -228,7 +254,7 @@ public class AnimatorUtility
 				if (null != bone_transform) {
 					//ボーンが有るなら
 					//Muscle値算出
-					var muscle_values = GetMuscleValue(bone_index, bone_transform.localRotation);
+					var muscle_values = GetMuscleValueFromRotation(bone_index, bone_transform.localRotation);
 					for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
 						HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
 						if ((uint)muscle_index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) {
@@ -244,10 +270,10 @@ public class AnimatorUtility
 	/// <summary>
 	/// Muscle値の取得
 	/// </summary>
-	/// <returns>Muscleインデックスと値の辞書</returns>
+	/// <returns>Muscle値</returns>
 	/// <param name="index">ボーンインデックス</param>
 	/// <param name="rotation">回転値</param>
-	private Vector3 GetMuscleValue(HumanBodyFullBones index, Quaternion rotation) {
+	private Vector3 GetMuscleValueFromRotation(HumanBodyFullBones index, Quaternion rotation) {
 		Vector3 result = Vector3.zero;
 		//Muscle値算出
 		AxesInformation axes_information = GetAxesInformation(index);
@@ -271,6 +297,33 @@ public class AnimatorUtility
 			value = Mathf.Clamp(value, -1.0f, 1.0f);
 			result[axis_index] = value;
 		}
+		return result;
+	}
+	
+	/// <summary>
+	/// Muscle値から回転値の取得
+	/// </summary>
+	/// <returns>回転値</returns>
+	/// <param name="index">ボーンインデックス</param>
+	/// <param name="rotation">Muscle値</param>
+	private Quaternion GetRotationFromMuscleValue(HumanBodyFullBones index, Vector3 muscle) {
+		//Muscle値算出
+		AxesInformation axes_information = GetAxesInformation(index);
+		Vector3 euler = new Vector3(muscle.x * axes_information.sign.x
+									, muscle.y * axes_information.sign.y
+									, muscle.z * axes_information.sign.z
+									);
+		for (int i = 0, i_max = 3; i < i_max; ++i) {
+			if (euler[i] < 0) {
+				//負数なら
+				euler[i] *= axes_information.limit.min[i] * -Mathf.Rad2Deg;
+			} else {
+				//正数なら
+				euler[i] *= axes_information.limit.max[i] * Mathf.Rad2Deg;
+			}
+		}
+		Quaternion rotation = Quaternion.Euler(euler);
+		Quaternion result = axes_information.pre_quaternion * rotation * Quaternion.Inverse(axes_information.post_quaternion);
 		return result;
 	}
 	
@@ -695,7 +748,7 @@ public class AnimatorUtility
 						}
 					}
 					//Muscle値変換
-					var muscle_values = animator_utility.GetMuscleValue(bone_index, rotation);
+					var muscle_values = animator_utility.GetMuscleValueFromRotation(bone_index, rotation);
 					for (int axis_index = 0, axis_index_max = 3; axis_index < axis_index_max; ++axis_index) {
 						HumanBodyMuscles muscle_index = (HumanBodyMuscles)HumanTrait.MuscleFromBone((int)bone_index, axis_index);
 						if ((uint)muscle_index < (uint)System.Enum.GetValues(typeof(HumanBodyMuscles)).Length) {
