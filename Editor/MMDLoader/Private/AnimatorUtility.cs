@@ -246,8 +246,13 @@ public class AnimatorUtility
 				//HACK: 正式な挙動分からず。取り敢えず、胸ボーンと背骨ボーンの中間点と腰ボーンの中間点が前を向く様にしておく
 				Transform spine_transform = GetTransformFromBoneIndex(HumanBodyFullBones.Spine);
 				Transform chest_transform = GetTransformFromBoneIndex(HumanBodyFullBones.Chest);
-				Quaternion sc_rotation = Quaternion.Lerp(spine_transform.rotation, chest_transform.rotation, 0.5f);
-				Quaternion center_rotation = Quaternion.Lerp(hips_transform.rotation, sc_rotation, 0.5f);
+				float spine_mass = GetMass(HumanBodyFullBones.Spine);
+				float chest_mass = GetMass(HumanBodyFullBones.Chest);
+				float sc_weight = chest_mass / (spine_mass + chest_mass);
+				Quaternion sc_rotation = Quaternion.Slerp(spine_transform.rotation, chest_transform.rotation, sc_weight);
+				float hips_mass = GetMass(HumanBodyFullBones.Hips);
+				float center_weight = (spine_mass + chest_mass) / (spine_mass + chest_mass + hips_mass);
+				Quaternion center_rotation = Quaternion.Slerp(hips_transform.rotation, sc_rotation, center_weight);
 				hips_transform.rotation = Quaternion.Inverse(center_rotation);
 			}
 		}
