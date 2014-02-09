@@ -237,11 +237,18 @@ public class AnimatorUtility
 					}
 				}
 			}
-			//腰ボーンの位置設定
-			{
+			{ //腰ボーンの位置設定
 				if (null != hips_transform) {
 					hips_transform.localPosition = -mass_center / mass_all;
 				}
+			}
+			{ //腰ボーンの回転設定
+				//HACK: 正式な挙動分からず。取り敢えず、胸ボーンと背骨ボーンの中間点と腰ボーンの中間点が前を向く様にしておく
+				Transform spine_transform = GetTransformFromBoneIndex(HumanBodyFullBones.Spine);
+				Transform chest_transform = GetTransformFromBoneIndex(HumanBodyFullBones.Chest);
+				Quaternion sc_rotation = Quaternion.Lerp(spine_transform.rotation, chest_transform.rotation, 0.5f);
+				Quaternion center_rotation = Quaternion.Lerp(hips_transform.rotation, sc_rotation, 0.5f);
+				hips_transform.rotation = Quaternion.Inverse(center_rotation);
 			}
 		}
 	}
